@@ -195,7 +195,7 @@ class FromBatoid:
             alpha = np.rad2deg( np.arctan2( 2 * mu_xy, mu_xx - mu_yy ) / 2 )
             
             # print( q * np.cos( alpha ), q * np.sin( alpha ), mu_xx, mu_yy, mu_xy )
-            print("%.3d %5.2f %10.2f %e %e" %( cnt, ellipticity_adimensional, alpha, x_cen, y_cen ) )
+            print("%.3d %5.2f %10.2f" %( cnt, ellipticity_adimensional, alpha ) )
             cnt+=1
             
             sl.append( sigma_l)

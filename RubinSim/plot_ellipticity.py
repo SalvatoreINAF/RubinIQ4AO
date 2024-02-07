@@ -6,15 +6,12 @@ Created on Mon Jan 22 09:13:17 2024
 @author: zanmar
 """
 
-# continue cleaning up the fromBatoid class.
-# - wavefronts for all Hxy, so return a cube.
-# - PSFs for all Hxy, so return a cube
-# - ellipticity (moment based) for all Hxy, return 2 vectors, PA and ellipticity
 
 from fromBatoid import FromBatoid
 import numpy as np
 import matplotlib.pylab as plt
 import matplotlib.patches as patches
+import argparse
 
 def regular_grid( radius ):
     
@@ -79,6 +76,41 @@ def plot_one_psf( fb, i ):
     ax.add_patch(ellip)
     
     return
+
+def pars2dof():
+    parser = argparse.ArgumentParser()
+
+    """
+                AOS degrees of freedom.
+            0,1,2 are M2 z,x,y in micron
+            3,4 are M2 rot around x, y in arcsec
+            5,6,7 are camera z,x,y in micron
+            8,9 are camera rot around x, y in arcsec
+    """
+
+    parser.add_argument('--M2z', help='M2 decenter z [-100, 100] micron', type=int, default=0, choices=range(-100,120,20) )
+    parser.add_argument('--M2x', help='M2 decenter x [-3000, 3000] micron', type=int, default=0, choices=range(-3000,3600,600) )
+    parser.add_argument('--M2y', help='M2 decenter y [-3000, 3000] micron', type=int, default=0, choices=range(-3000,3600,600) )
+    parser.add_argument('--M2rx', help='M2 tilt x [-80, 80 ] arcsec', type=int, default=0, choices=range(-80,90,10) )
+    parser.add_argument('--M2ry', help='M2 tilt y [-80, 80 ] arcsec', type=int, default=0, choices=range(-80,90,10) )
+
+    parser.add_argument('--Cz', help='Camera decenter z [-100, 100] micron', type=int, default=0,  choices=range(-100,110,10) )
+    parser.add_argument('--Cx', help='Camera decenter x [-3000, 3000] micron', type=int, default=0, choices=range(-3000,3600,600) )
+    parser.add_argument('--Cy', help='Camera decenter y [-3000, 3000] micron', type=int, default=0, choices=range(-3000,3600,600) )
+    parser.add_argument('--Crx', help='Camera tilt x [-80, 80 ] arcsec', type=int, default=0, choices=range(-80,90,10) )
+    parser.add_argument('--Cry', help='Camera tilt y [-80, 80 ] arcsec', type=int, default=0, choices=range(-80,90,10) )
+
+
+    args = parser.parse_args()
+
+    dof = np.zeros(50)
+
+    dof[0:5] = ( args.M2z, args.M2x, args.M2y, args.M2rx, args.M2ry )
+    dof[5:10]= ( args.Cz, args.Cx, args.Cy, args.Crx, args.Cry )
+
+    print( 'dof=', dof[0:10] )
+    return dof
+
     
 def plot_ellipticity_map( fb ):
     
@@ -113,61 +145,17 @@ if( __name__ == '__main__'):
     fb.hx, fb.hy = x, y
     fb.wl_index = 1
     #fb.hx, fb.hy = np.array([0.55]), np.array([0.25]) 
-    
-    dof = np.zeros(50)
-    # dof[3] = 10
-    # dof[4] = 5
+    dof = pars2dof()
+
     fb.dof = dof
     
-    # -action, plot c4 to see where focus is optimized, center?
-    # plot_c4( fb )
-
-
-## wavefront
-    
-    # wfarr = fb.wavefront()    
-    
-    # fig2, ax2 = plt.subplots()
-    # ax2.imshow( wfarr[8], cmap = 'jet', origin='lower' )
-    # ax2.autoscale(False)
 
     fb.psfFFT_compute()
     fb.ellipticity_compute()
     
 ## PSF
-    plot_one_psf( fb, 100)
+    # plot_one_psf( fb, 100)
 
 ## ellipticity map
     plot_ellipticity_map( fb )
     
-    
-
-    
-### TODO: ellipticity seems to be working as expected.
-#   find a nice way to represent a map of ellipticity. PA is obvious but
-#  magnitude?  see also papers by Nohla, etc.
-    
-
-
-    
-    
-    # znkarr_bat = fb.zernike_coeffs_batoid()
-    # znkarr = fb.zernike_coeffs()
-    
-    # plt.plot( x, znkarr[:,3], '.')
-    # plt.plot( x, znkarr_bat[:,4], 'x' )
-    
-    # wbat = znkarr_bat[:,4]
-    # nobat = znkarr[:,3]
-    # for i in range( wbat.size ):
-    #     print( "%4.1f %4.1f %4.1f %10.4f %10.4f" %(x[i], y[i], 
-    #                                          np.sqrt( x[i]**2+y[i]**2), 
-    #                                          wbat[i], nobat[i] ))
-    
-
-
-# TODO: press on the plot for a pop up PSF? useful for debugging and finding
-#    nice limits.
-# is the plot nicer if I export to svg?
-# save a few cases for the slides... work in progress.
-# try plotting a point at the center of the bar
