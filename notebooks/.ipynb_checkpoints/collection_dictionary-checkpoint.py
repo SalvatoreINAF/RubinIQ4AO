@@ -1,0 +1,38 @@
+def collection_dictionary():
+
+    collection_dict = {
+      45: 'pipetask_output/20240205T120140Z',
+      36: 'pipetask_output/20231207T094655Z',
+        50: 'pipetask_output/20231205T153350Z',
+        10: 'pipetask_output/20231007T124552Z',
+        11: 'pipetask_output/20231026T090753Z',
+        12: 'pipetask_output/20231026T090753Z',
+        13: 'pipetask_output/20231026T093720Z',
+        14: 'pipetask_output/20231026T101823Z', 
+        15: 'pipetask_output/20231115T151544Z', 
+        16: 'pipetask_output/20231116T154834Z', 
+        17: 'pipetask_output/20231121T130937Z', 
+        18: 'pipetask_output/20231124T170014Z',
+        19: 'pipetask_output/20231123T155600Z',
+        20: 'pipetask_output/20231124T165503Z',
+        21: 'pipetask_output/20231124T170014Z',
+        22: 'pipetask_output/20231123T155744Z',
+        23: 'pipetask_output/20231124T170014Z',
+        24: 'pipetask_output/20231124T170014Z',
+        25: 'pipetask_output/20231123T155744Z',
+        26: 'pipetask_output/20231124T170014Z',
+        27: 'pipetask_output/20231124T170014Z',
+        28: 'pipetask_output/20231123T155744Z',
+        31: 'pipetask_output/20231127T151802Z',
+        34: 'pipetask_output/20231201T142125Z', 
+        35: 'pipetask_output/20231201T142125Z', 
+        38: 'pipetask_output/20231207T180504Z',
+        37: 'pipetask_output/20231207T181127Z',
+        39: 'pipetask_output/20231207T182832Z',
+        40: 'pipetask_output/20231211T105319Z',
+        41: 'pipetask_output/20231211T110947Z',
+        42: 'pipetask_output/20231207T101750Z',
+        43: 'pipetask_output/20231211T112634Z',
+        44: 'pipetask_output/20231211T114300Z'}
+    
+    return collection_dict
