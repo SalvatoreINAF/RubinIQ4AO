@@ -1,0 +1,10 @@
+36: Niente effetti solo variance=5, detectors: [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude originale, rot=0
+37: Niente effetti solo variance=5, detectors: [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude originale, rot=45
+38: Niente effetti solo variance=5, detectors: [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude originale, rot=90
+39: Niente effetti solo variance=5, detectors: [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude 30, rot=0
+40: Niente effetti solo variance=5, detectors: [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude 30, rot=45
+41: Niente effetti solo variance=5, detectors: [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude 30, rot=90
+42: Niente effetti solo variance=5, detectors: [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude 90, rot=0
+43: Niente effetti solo variance=5, detectors: [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude 90, rot=45
+44: Niente effetti solo variance=5, detectors: [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude 90, rot=90
+51: come 42 ma con i dof 3 e 4 = 10
