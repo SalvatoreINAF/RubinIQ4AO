@@ -5,7 +5,7 @@
 # $3: true/false, activate/deactivate ingesting raws in the repo
 # $4: true/false, activate/deactivate pipetask to generate calexp from raws
 # $5: true/false, activate/deactivate the update of collection_dict
-# $6: 0: personal area; 1: shared area
+# $6: 0: save to personal area; 1: save to shared area
 
 if [ "$6" ==  1  ]; then
     REPO="/sdf/data/rubin/shared/image_quality/imsim/repo/"
@@ -76,14 +76,10 @@ if $5; then
     #Prima dovrei controllare che l'attuale seqnum non sia nel collection_dictionary e poi aggiungerlo o sostituirlo
     seqnum_in_collection=$(grep $seqnum_in":" $collection_dictionary_github)
     seqnum_in_collection_personal=$(grep $seqnum_in":" $collection_dictionary_personal)
-    echo $seqnum_in_collection
-    echo $seqnum_in_collection_personal
     
     # Manipolo la stringa da inserire per essere usabile con sed
     repo_folder_to_substitute=${repo_folder/"/"/"\/"}
 
-    echo "String nuova: "$repo_folder_to_substitute
-    
     if [ "$seqnum_in_collection" == "" ]; then
         echo "Not in collection (github)"
         sed -i "s/{/{\n      ${seqnum_in}: '${repo_folder_to_substitute}',/" ${collection_dictionary_github}
