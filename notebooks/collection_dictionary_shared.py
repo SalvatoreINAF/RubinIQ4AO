@@ -1,6 +1,7 @@
 def collection_dictionary():
 
     collection_dict = {
+53: 'pipetask_output/20240228T234722Z',
       44: 'pipetask_output/20231211T114300Z',
       43: 'pipetask_output/20231211T112634Z',
       42: 'pipetask_output/20231207T101750Z',

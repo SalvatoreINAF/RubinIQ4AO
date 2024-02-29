@@ -8,3 +8,5 @@
 43: Niente effetti solo variance=5, detectors: [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude 90, rot=45
 44: Niente effetti solo variance=5, detectors: [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude 90, rot=90
 51: come 42 ma con i dof 3 e 4 = 10
+52: come 51
+53: tutti i detector, con seeing=0.5, dof0=30 dof3=20 dof4=10, allo zenith
