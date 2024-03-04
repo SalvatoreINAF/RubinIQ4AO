@@ -10,3 +10,7 @@
 51: come 42 ma con i dof 3 e 4 = 10
 52: come 51
 53: tutti i detector, con seeing=0.5, dof0=30 dof3=20 dof4=10, allo zenith
+54, 55, 56: prove per tempo di calcolo galsim
+57: come 53, dof0=0
+58: come 53, dof0=-30
+59: tutti i detector, seeing=0.5, dof4=15, zenith

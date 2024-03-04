@@ -12,6 +12,8 @@ import pandas as pd
 
 def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_positions, n_grid, fileout=''):
 
+    rot = (calexp.info.getVisitInfo().getBoresightRotAngle()).asDegrees()
+        
     if regular_grid_or_star_positions == 0:
         # Per la visualizzazione della PSF su griglia regolare
         n_grid = n_grid
@@ -53,13 +55,15 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     theta = np.arctan2(2. * i_xy, i_xx - i_yy) / 2.
     e1 = (i_xx - i_yy) / (i_xx + i_yy)
     e2 = (2. * i_xy) / (i_xx + i_yy)
-
+    
     theta_alternate = np.arctan2(e2, e1) / 2.
     assert np.allclose(theta, theta_alternate)
 
     e = np.sqrt(e1**2 + e2**2)
     ex = e * np.cos(theta)
     ey = e * np.sin(theta)
+    ex_rot = ex*np.cos(np.radians(rot)) - ey*np.sin(np.radians(rot))
+    ey_rot = ex*np.sin(np.radians(rot)) + ey*np.cos(np.radians(rot))
     
     fwhm = []
     # FWHM
@@ -71,8 +75,8 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     
     if fileout != '':
         df = pd.DataFrame(data={'x': xx_for_zip, 'y': yy_for_zip, 'e': e, 
-                               'ex': ex, 'ey': ey, 'e1': e1, 'e2': e2, 'theta': theta,
+                               'ex': ex, 'ey': ey, 'ex_rot': ex_rot, 'ey_rot': ey_rot, 'e1': e1, 'e2': e2, 'theta': theta,
                                'theta_alternate':theta_alternate, 'fwhm': fwhm})
         df.to_csv(fileout, index=None)
     
-    return e, ex, ey, e1, e2, xx, yy, fwhm, size
+    return e, ex, ey, ex_rot, ey_rot, e1, e2, xx, yy, theta, fwhm, size
