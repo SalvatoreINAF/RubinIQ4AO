@@ -14,3 +14,9 @@
 57: come 53, dof0=0
 58: come 53, dof0=-30
 59: tutti i detector, seeing=0.5, dof4=15, zenith
+60: prova
+61: prova
+80: come 62 ma per test di Jim e con stamp.type: LSST_Silicon
+---ANCORA DA PRODURRE---
+62-70: come 36-44 ma con detector diversi
+71-79: come 62-70 ma con perturbazione

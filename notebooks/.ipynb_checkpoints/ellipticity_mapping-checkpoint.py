@@ -31,7 +31,7 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
         xx_for_zip = xx
         yy_for_zip = yy
         xxshape = len(xx)
-        
+
     size = []
     i_xx = []
     i_yy = []
@@ -46,7 +46,7 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
         i_yy.append(shape.getIyy())
         i_xy.append(shape.getIxy())
         points.append(point)
-        
+
     size = np.reshape(size, xxshape)
     i_xx = np.reshape(i_xx, xxshape)
     i_yy = np.reshape(i_yy, xxshape)
