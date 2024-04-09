@@ -16,7 +16,13 @@
 59: tutti i detector, seeing=0.5, dof4=15, zenith
 60: prova
 61: prova
-80: come 62 ma per test di Jim e con stamp.type: LSST_Silicon
+80: test sottoposto alla community, sta dando molti problemi... RISOLTO 240406
+81: tentativo di saturate, non sta funzionando...
+82: Una saturata e una non saturata per Marcella, solo det 94, niente perturbazioni (ATTENZIONE, C'È IL TRUCCO: STO USANDO LA GRIGLIA E NON USANDO LO STAMP NEL .YAML)
+83:     Simulare una PSF (VÀ BENE ANCHE GRIGLIA) al centro di ciascuno dei 3 detector numero 36, 56 e 143 (che dovrebbero formare su per giù un triangolo e posizionati non troppo al bordo da essere vignettati); impostare un seeing pari a 0.5; impostare un vettore di DOF di tutti zeri tranne: DOF[0] = -10; DOF[10] = 0.2; DOF[11] = -0.05, rot=0
+84: come 83, ma rot=30
+85: come 83, ma rot=60
+86: come 83, ma rot=90
 ---ANCORA DA PRODURRE---
 62-70: come 36-44 ma con detector diversi
 71-79: come 62-70 ma con perturbazione
