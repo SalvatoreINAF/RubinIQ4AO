@@ -19,7 +19,7 @@ def regular_grid( radius ):
     x = np.linspace(-radius*0.95, radius*0.95, num=20 )
     xx, yy = np.meshgrid( x, x )
     
-    ikeep = np.sqrt( xx**2 + yy**2 ) < radius
+    ikeep = np.sqrt( xx**2 + yy**2 ) < radius ## prova
     
     return xx[ikeep].flatten(), yy[ikeep].flatten()
     
