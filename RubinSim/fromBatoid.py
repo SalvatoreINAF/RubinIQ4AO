@@ -6,23 +6,18 @@ Created on Thu Jan 11 16:02:24 2024
 @author: zanmar
 """
 
-from util import zernike_optimal_sampling, fit_zernike_coefficients
-from build_zernike_cube import get_zeta_arr
+from util import fit_zernike_coefficients, rayPSF
 import batoid
 from batoid_rubin import builder
 import numpy as np
-import h5py
-from pathlib import Path
-import sys
-import timeit
 
 class FromBatoid:
     
-    def __init__( self, wl_index = 0, jmax = 22 ):
+    def __init__( self, wl_index = 0, jmax = 22, debug=False ):
         # default telescope, etc
         self.jmax = jmax                  # zernike pupil terms
         self.field_radius = 1.708       # degrees
-        if __debug__ :
+        if( debug ):
             print("*** dbg: only 2 wavelengths")
             self.wl_array = np.array( [0.384, 0.481]) * 1e-6
             self.wave_files = ["LSST_u.yaml", "LSST_g.yaml"]
@@ -42,8 +37,9 @@ class FromBatoid:
         self._optic = None
         self._builder = None
         self._telescope = None
-        
+
         self.psf = None
+        self.psf_type = 'ray'       #can be 'ray' or 'fft'
         self.ellipticity = None
         self.update_telescope()
         
@@ -75,7 +71,7 @@ class FromBatoid:
         assert isinstance(value, np.ndarray ) and value.size == 50, \
             'expected 1D numpy array of size 50'
         if( not np.allclose( value,self._dof ) ):
-            print( 'new dof, update builder/telescope' )
+            # print( 'new dof, update builder/telescope' )
             self._dof = value
             self.rebuild_telescope_with_dof()
         """            AOS degrees of freedom.
@@ -165,6 +161,32 @@ class FromBatoid:
         
         return
     
+    def psf_compute( self, psf_type = 'ray', seeing=0.5 ):
+        if( psf_type == 'ray' or psf_type == 'fft' ):
+            self.psf_type = psf_type
+        else:
+            print('*** invalid psf_type. Using current valid:', self.psf_type )
+            
+        psf_list = []
+        if( self.psf_type == 'ray' ):
+            for x, y in zip( self.hx, self.hy ):
+                psf = rayPSF( self._telescope,
+                              np.deg2rad(x), np.deg2rad(y),
+                              self.wl, nphot=10000,
+                              seeing=seeing )
+                psf_list.append( psf )
+        elif( self.psf_type == 'fft' ):
+            for x, y in zip( self.hx, self.hy ):
+                psf = batoid.analysis.fftPSF(self._telescope,
+                                             np.deg2rad(x), np.deg2rad(y),
+                                             self.wl, nx=360,
+                                       pad_factor=4, reference='mean') 
+                psf_list.append( psf )
+
+        self.psf = psf_list
+        
+        return
+    
     def ellipticity_compute( self ):
         
         sl = []
@@ -211,132 +233,83 @@ class FromBatoid:
         return 
             
             
-            
-            
-            
-            
-            
-            
-            
+    def get_list_nominal_znk_coeffs( self ):
         
-        
-        
+        assert np.allclose( self.dof, np.zeros(50) ), "you want nominal but current dof is not zero"
+        res = []
+        for i in range( self.n_wl ):
+            self.wl_index = i
+            res.append( (i, self.zernike_coeffs() ) )
+            
+        return res
 
-def get_dof_list( amp, npert ):
-    lista = []
-    for i in range( len( amp ) ):
-        zeta_i = np.linspace( 0, amp[i], num = npert + 1)[1:]
-        for j in zeta_i:
-            dof = np.zeros( 50 )
-            dof[ i ] = j
-            lista.append( dof )
-    return lista
-    
-def get_list_nominal_znk_coeffs( fb ):
-    
-    assert np.allclose( fb.dof, np.zeros(50) ), "you want nominal but current dof is not zero"
-    res = []
-    for i in range( fb.n_wl ):
-        fb.wl_index = i
-        res.append( (i, fb.zernike_coeffs() ) )
-        
-    return res
 
-def get_list_cube_znk_coeffs( fb, dof_list ):
-    
-    list_cube = []
-    for i in range( fb.n_wl ):
-        cube = []                       # collect ndist x nznk x nfield 
-        for dof in dof_list:
-            # print( dof[0:10] )
-            fb.dof = dof
-            cube.append( fb.zernike_coeffs() )
+    def get_list_cube_znk_coeffs( self, dof_list ):
         
-        cube = np.transpose( np.asarray( cube ) )   #expected target shape
-        list_cube.append( (i, cube ) )
-    return list_cube
-
-def save_to_hd5( list_nominals, list_cube, fb, mal ):
-    if(__debug__):
-        fname = "znk_batoid_coeffs_wl_%d_jmax_%d_dbg.hdf5" %(fb.n_wl, fb.jmax)
-    else:
-        fname = "znk_batoid_coeffs_wl_%d_jmax_%d.hdf5" %(fb.n_wl, fb.jmax)
-        
-    mypath = Path( fname )
-    if( mypath.is_file() ):
-        print( "File %s found." %(fname ) )
-        input( "Continue? [ctrl+C] to exit" )
+        list_cube = []
+        for i in range( self.n_wl ):
+            self.wl_index = i
+            cube = []                       # collect ndist x nznk x nfield 
+            cnt = 1
+            for dof in dof_list:
+                print( dof[0:10], cnt,'/', len(dof_list), i+1,'/', self.n_wl )
+                self.dof = dof
+                cube.append( self.zernike_coeffs() )
+                cnt+=1
             
-    f = h5py.File( fname,'w')
-    for wl_cnt in range( fb.n_wl ):
-        grp_current = f.create_group("wl%d" %( wl_cnt + 1) )
-        
-        grp_current.create_dataset("cube", data = list_cube[ wl_cnt ][1] )
-        grp_current.create_dataset("coords", data = np.vstack( ( fb.hx, fb.hy ) ) )
-        grp_current.create_dataset("nominal", data = list_nominals[ wl_cnt ][1] )
-        grp_current.create_dataset("zeta", data = mal.zeta )
-        assert wl_cnt == list_cube[ wl_cnt ][0]
-        assert wl_cnt == list_nominals[ wl_cnt ][0]        
-        grp_current.attrs['wl'] = fb.wl_array[ wl_cnt ]
-        grp_current.attrs['nfield'] = len( fb.hx )
-        grp_current.attrs['nzernike'] = fb.jmax
-        grp_current.attrs['n_dof'] = mal.n_dof
-        grp_current.attrs['npert'] = mal.nperturbations
-        grp_current.attrs['field_radius'] = fb.field_radius
-        
-    f.close()
-    print( "Saved %s" %(fname) )
-    return
+            cube = np.asarray( cube )
+            if( cube.shape[1] == self.jmax ):
+                cube = np.transpose( cube, [2, 1, 0 ] )
+            elif( cube.shape[1] == self.hx.size ):
+                cube = np.transpose( cube, [1, 2, 0])
+            else:
+                print('*** expect trouble ahead')
+                
+            list_cube.append( (i, cube ) )
+        return list_cube
 
 class MisAlignment():
     def __init__( self ):
         self._max_amplitude = np.array([25.0, 1000.0, 1000.0, 25.0, 25.0, 25.0, 4000.0, 4000.0, 25.0, 25.0])
-        self.nperturbations = 4
-        self.list = get_dof_list( self._max_amplitude, self.nperturbations )
-        self.zeta = get_zeta_arr( self._max_amplitude, self.nperturbations )
         self.n_dof = len( self._max_amplitude )
+        self.nperturbations = 4
+        self.list = self.get_dof_list()
+        self.zeta = self.get_zeta_arr()
             
-        
+    def get_dof_list( self ):
+        lista = []
+        for i in range( self.n_dof ):
+            zeta_i = np.linspace( 0, self._max_amplitude[i], num = self.nperturbations + 1)[1:]
+            for j in zeta_i:
+                dof = np.zeros( 50 )
+                dof[ i ] = j
+                lista.append( dof )
+        return lista
+    
+    def get_zeta_arr( self ):
+        """Build an array with nperturbation linear distorsions for each 
+        distorsion on the max_amplitude array.
 
-if __name__== '__main__':
-    
-    fBat = FromBatoid()
-    
-    mal = MisAlignment()
+        Parameters
+        ----------
+        max_amplitude : float array 
+            n distorsion elements, e.g. dx, dy, dz, Rx, Ry for M2 and Camera
+        nperturbations: int
+            number of linear distorsions. Example, if amp for dx is 1000 and
+        nrow is 4, we return for that distorsion [250, 500, 750, 1000].
         
-    # H
-    hx, hy, _, _ = zernike_optimal_sampling( fBat.jmax )
-    
-    hx_deg, hy_deg = hx * fBat.field_radius, hy * fBat.field_radius
-    fBat.hx, fBat.hy = hx_deg, hy_deg
-    
-    tic=timeit.default_timer()
-    list_nominals = get_list_nominal_znk_coeffs( fBat )
-    toc = timeit.default_timer()
-    
-    print("Nominals took %d seconds" %(toc - tic))
-    print("Estimated total = %d" %( mal.zeta.size * (toc - tic)  ) )
-    
-    list_cube = get_list_cube_znk_coeffs( fBat, mal.list )
-    
-    tac = timeit.default_timer()
-    print( "Actual time = %d" %(tac -tic ) )
-    
-    save_to_hd5( list_nominals, list_cube, fBat, mal )
-    
-    
-    
-    
-    
-    
-    
-    
+        Returns
+        -------
+        zeta : array
+            nrow x len( amp )  array
     
         
-        
-        
-        
-            
-        
-        
+        """
+
+        zeta = np.zeros( (self.nperturbations, self.n_dof ))
     
+        for i in range( self.n_dof ):
+            zeta_i = np.linspace( 0, self._max_amplitude[i], num = self.nperturbations + 1)[1:]
+            zeta[:,i] = zeta_i
+    
+        return zeta

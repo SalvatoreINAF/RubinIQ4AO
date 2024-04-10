@@ -5,7 +5,7 @@ import batoid
 import galsim
 import h5py
 
-def zernike_optimal_sampling( n ):
+def zernike_optimal_sampling( n, debug=False ):
     """
     % Generate Zernike polynomial optimal sampling grid
     %
@@ -43,7 +43,7 @@ def zernike_optimal_sampling( n ):
 
     rho = np.asarray( rho_list )
     theta = np.asarray( theta_list )
-    if( __debug__):
+    if(  debug ):
         print('*** dbg: slicing field points to a tenth')
         rho= rho[0:-1:10]
         theta=theta[0:-1:10]
@@ -305,6 +305,106 @@ def coefficients2wavefront( Xp, Yp, Z_abe, wavelength, pupil_mask ):
     PSF = np.abs( np.fft.ifftshift( np.fft.ifft2( E )))**2.
     
     return W, E, PSF
+
+def rayPSF( telescope, theta_x, theta_y, wavelength, nphot=1000,
+           seeing=0.5):
+    """
+    Compute PSF with a random number of rays
+    
+
+    Parameters
+    ----------
+    optic :             (batoid.Optic)  – Optical system
+    theta_x, theta_y :  (float)         - Field angle in radians
+    wavelength :        (float)         – Wavelength in meters
+    nphot :             (int, optional) – Number of uniformly sampled rays 
+                                            from annular region.
+        
+    seeing :            (float)         - FWHM of seeing in arcsec.
+
+    Returns
+    -------
+    (batoid.Lattice) – A 21x21 pixel batoid.Lattice object containing the 
+    relative PSF values and the primitive lattice vectors of the focal 
+    plane grid. Returned coordinates are in um.
+
+    """
+    
+    rng = np.random.default_rng()
+    
+    bins = 21   #box of 21x21 pixels
+    bo2 = bins//2
+    myrange = [[-bo2*10e-6, bo2*10e-6], [-bo2*10e-6, bo2*10e-6]]
     
     
+    rv = batoid.RayVector.asPolar(
+        optic=telescope, wavelength=wavelength,
+        nrandom=nphot, rng=rng,
+        theta_x=theta_x, theta_y=theta_y )
+    telescope.trace( rv )
+    rv.x[:] -= np.mean(rv.x[~rv.vignetted])
+    rv.y[:] -= np.mean(rv.y[~rv.vignetted])
+    scale = 10e-6 * seeing/2.35/0.2     #sigma in um, with seeing as FWHM
+    rv.x[:] += rng.normal(scale=scale, size=len(rv))
+    rv.y[:] += rng.normal(scale=scale, size=len(rv))
+    # Bin rays
+    psf, _, _ = np.histogram2d(
+        rv.y[~rv.vignetted], rv.x[~rv.vignetted], bins=bins,
+        range=myrange )
+    dx=10e-6
+    dy=10e-6
+    primitive_vectors = [[dx,0],[0,dy]]
+    return batoid.Lattice( psf, primitive_vectors)
+
+class batoid_coeffs_cube( object ):
+    def __init__(self, grp):
+        self.wl             = grp.attrs['wl']
+        self.nfield         = grp.attrs['nfield']
+        self.nznkpupil      = grp.attrs['nzernike']
+        self.ndof           = grp.attrs['n_dof']    #10
+        self.npert          = grp.attrs['npert']    #4 different amplitudes
+        self.field_radius   = grp.attrs['field_radius']
+        
+        self.coords         = np.asarray(grp['coords'] ) #2 x nfield
+        self.cube           = np.asarray(grp['cube']) #nfield x ncoeffs x ndist
+        self.nominal        = np.asarray( grp['nominal'] ) #nfield x ncoeffs
+        self.zeta           = np.asarray( grp['zeta'] ) #npert x ndof array
+        
+    def __str__( self ):
+        print("_"*40)
+        print("%-15s %-20s" %( "# array", "shape" ) )
+        print("%-15s %-20s" %( 'cube', self.cube.shape ) )
+        print("%-15s %-20s" %( 'nominal', self.nominal.shape ) )
+        print("%-15s %-20s" %( 'coords', self.coords.shape ) )
+        print("%-15s %-20s" %( 'zeta', self.zeta.shape ) )
+        print("%-15s %-20s" %( "\n# attributes", "value" ) )
+        print("%-15s %-20s" %( 'wl', self.wl ) )
+        print("%-15s %-20s" %( 'nfield', self.nfield ) )
+        print("%-15s %-20s" %( 'nznkpupil', self.nznkpupil ) )
+        print("%-15s %-20s" %( 'ndof', self.ndof ) )
+        print("%-15s %-20s" %( 'npert', self.npert ) )
+        print("%-15s %-20s" %( 'field_radius', self.field_radius ) )
+        
+        
+        return ""
+
+def read_h5_coeffs( fname ):
+    """
+    Reads the file previously created in python with batoid coefficients to be
+       fitted for lsst model
+    ----------
+    fname : str
+        input h5 file name with data and metadata.
+
+    Returns
+    -------
+    A list of batoid cubes with (nfield x znkpupil x zeta) and meta data
+    """
+    with h5py.File( fname, 'r' ) as f:
+        lista = []
+        for grp in f:
+            lista.append( batoid_coeffs_cube( f[grp] ))   
+            
+    return lista
+
     
