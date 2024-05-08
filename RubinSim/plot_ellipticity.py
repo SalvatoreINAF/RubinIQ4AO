@@ -8,20 +8,13 @@ Created on Mon Jan 22 09:13:17 2024
 
 
 from fromBatoid import FromBatoid
-from util import rayPSF
+from util import rayPSF, regular_grid, plot_ellipticity_map
 import numpy as np
 import matplotlib.pylab as plt
 import matplotlib.patches as patches
 import argparse
+import lsstModel
 
-def regular_grid( radius ):
-    
-    x = np.linspace(-radius*0.95, radius*0.95, num=20 )
-    xx, yy = np.meshgrid( x, x )
-    
-    ikeep = np.sqrt( xx**2 + yy**2 ) < radius ## prova
-    
-    return xx[ikeep].flatten(), yy[ikeep].flatten()
     
 def plot_c4( fb ):
     x1 = np.linspace( -fb.field_radius, fb.field_radius, num = 50 )
@@ -127,7 +120,10 @@ def pars2dof():
 
     parser.add_argument('--dof10', help='bending mode i=10', type=float, default=0.0 )
     parser.add_argument('--dof11', help='bending mode i=10', type=float, default=0.0 )
-
+    
+    parser.add_argument('-m','--model', help="use model, not batoid", action="store_true")
+    parser.add_argument('-i','--interactive', help="plot is interactive to inspect PSFs", action="store_true")
+    
     args = parser.parse_args()
 
     dof = np.zeros(50)
@@ -138,7 +134,7 @@ def pars2dof():
     dof[10], dof[11] = args.dof10, args.dof11
 
     # print( 'dof=', dof[0:12] )
-    return dof
+    return dof, args.model, args.interactive
 
 def save_ellipticity_table( fname, fb ):
     U = fb.ellipticity['el'] * np.cos( np.deg2rad( fb.ellipticity['pa'] ) )
@@ -150,38 +146,6 @@ def save_ellipticity_table( fname, fb ):
     # np.transpose([x,y*2,z/2]),delimiter=',',header='uno,dos,tres')
     print( 'saved to file: %s' %fname )
     return
-    
-def plot_ellipticity_map( fb ):
-    
-    fig, ax = plt.subplots()
-    
-    U = fb.ellipticity['el'] * np.cos( np.deg2rad( fb.ellipticity['pa'] ) )
-    V = fb.ellipticity['el'] * np.sin( np.deg2rad( fb.ellipticity['pa'] ) )
-    M = np.hypot(U, V)
-    ax.quiver(fb.hx, fb.hy, U, V, M, units='xy', scale=1.5, headwidth=1,
-              headlength=0, headaxislength=0, pivot = 'middle',
-              linewidth=0.8)
-    # ax.scatter( fb.hx, fb.hy, color='black', s=1)
-
-    # plt.colorbar(label='e')
-    # ax.clim(0.01, 0.12)
-    
-    ax.set_xlim(-fb.field_radius, fb.field_radius )
-    ax.set_ylim(-fb.field_radius, fb.field_radius )
-    ax.set_aspect('equal', 'box')
-    ax.set_title('ellipticity' )
-    ax.set_xlabel('hx [deg]')
-    ax.set_ylabel('hy [deg]')
-
-    plt.show()
-    
-    
-# plt.quiver(xx, yy, ex, ey, e, headlength=0., headwidth=1., pivot='mid', width=0.003)
-# colorbar = plt.colorbar(label='e')
-# plt.clim(0.022, 0.026)
-# plt.xlabel('x')
-# plt.ylabel('y')
-# plt.title('Ellipticity Sticks')
 
 class PointBrowser:
     """
@@ -328,12 +292,7 @@ def grid_from_file( fname ):
 if( __name__ == '__main__'):
 
     manypoints = True
-    
-    fb = FromBatoid()
-
-    fb.wl_index = 1
-
-    dof = pars2dof()
+    dof, with_model, interactive = pars2dof()
     # dof = np.zeros(50)
     # dof[0] = -10
     # # dof[1] = 000
@@ -345,66 +304,73 @@ if( __name__ == '__main__'):
     # dof[11] = -0.05
 
     print( 'dof=', dof[0:12] )
-    fb.dof = dof
+
+    if( with_model ):
+        # fname = 'znk_batoid_coeffs_wl_2_jmax_22_dbg.hdf5'
+        fname = 'znk_batoid_coeffs_wl_6_jmax_22.hdf5'
+        # fname = 'znk_batoid_coeffs_wl_2_jmax_37_dbg.hdf5'
+        # fname = 'znk_batoid_coeffs_wl_6_jmax_37.hdf5'
+
+        lm = lsstModel.lsstModel( batoid_cube_file=fname, n_fldznk=22)
+        lm.wl_index = 1
+        lm.dof = dof[0:10]
+        
+        fov = lm.field_radius
+    else:
+        fb = FromBatoid()
+        fb.wl_index = 1
+        fb.dof = dof
+        
+        fov = fb.field_radius
+        
+
+
 
     
     if( manypoints ):
         # fname = 'data/mean_ellipticities_20240301T131538.csv'
         # fname = 'data/ellipticities_focalplane_seqnum0059.csv'  
         # y, x = grid_from_file( fname )                  ###x,y exchanged!
-
-        x, y = regular_grid( fb.field_radius)
-        fb.hx, fb.hy = x, y
+        x, y = regular_grid( fov )
+        if( with_model ):
+            lm.set_hxhy(x, y)
+        else:
+            fb.hx, fb.hy = x, y
+            
         # fb.hx, fb.hy = np.array([1.]), np.array([0])
     else:
-        fb.hx, fb.hy = np.array([1.0]), np.array([0.5]) 
+        if( with_model ):
+            lm.set_hxhy( np.array([1.0]), np.array([0.5]) )
+        else:
+            fb.hx, fb.hy = np.array([1.0]), np.array([0.5]) 
 
 
-    fb.psf_compute( psf_type = 'ray', seeing=0.5 )
-    fb.ellipticity_compute()
+    if( with_model ):
+        lm.psf_compute()
+        lm.ellipticity_compute()
+        ellipticity_dic = lm.ellipticity
+        
+    else:
+        fb.psf_compute( psf_type = 'fft', seeing=0.5 )
+        fb.ellipticity_compute()
+        ellipticity_dic = fb.ellipticity
         ## PSF
        
-    # if( manypoints ):
-    #     # ellipticity map
-    #     plot_ellipticity_map( fb )
-    #     # save_ellipticity_table('data/pipo.txt', fb)
-    # else:
-    #     plot_one_psf( fb, 0)
-
-
-    plot_interactive( fb )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    if( interactive ):
+        if( with_model ):
+            print( 'interavtive mode not implemented yet for model')
+            pass
+            
+        else:    
+            plot_interactive( fb )
+    else:      
+        if( manypoints ):
+            # ellipticity map
+            plot_ellipticity_map( x, y, ellipticity_dic, fov )
+            # save_ellipticity_table('data/pipo.txt', fb)
+        else:
+            plot_one_psf( fb, 0)
 
 
     
 
-    # fb.psfFFT_compute()
-
-    
-    
-    # mypsf = rayPSF( fb._telescope, np.deg2rad(1.2), np.deg2rad(1.2), fb.wl,
-    #                 seeing=0.5, nphot=10000)
-        
-    
-    
-        
-    
-
-
-
-    

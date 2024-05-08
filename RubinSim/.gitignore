@@ -1,0 +1,10 @@
+*pyc
+*.hdf5
+*.h5
+*.swp
+.spyproject*
+*.ipynb_checkpoints*
+*.pkl
+*~
+test_znk_w1_z11.hdf5.orig
+test_znk_w1_z11.hdf5.orig_linux

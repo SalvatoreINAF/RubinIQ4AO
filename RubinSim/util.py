@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
 import numpy as np
+import numpy.ma as ma
 import batoid
 import galsim
 import h5py
+import matplotlib.pyplot as plt
 
 def zernike_optimal_sampling( n, debug=False ):
     """
@@ -215,7 +217,7 @@ def LSSTAberrations( perturbation, znk_basis, coeffs_tuple ):
     return aberrationCoefficientsPupil
     
 
-def fit_zernike_coefficients(  tel1, thx, thy, wavelength, n_terms ):
+def fit_zernike_coefficients(  tel1, thx, thy, wavelength, n_terms, reference ):
     """Fit a wavefront with zernike polynomials with galsim.
 
     Parameters
@@ -228,6 +230,8 @@ def fit_zernike_coefficients(  tel1, thx, thy, wavelength, n_terms ):
         in meters
     n_terms: int 
         number of coefficients for the polynomial.
+    reference: str
+        'chief' or 'mean'
     
     Returns
     -------
@@ -237,12 +241,12 @@ def fit_zernike_coefficients(  tel1, thx, thy, wavelength, n_terms ):
     Notes
     -----
     
-    """    
+    """
     opd = batoid.wavefront(
             tel1,
-            np.deg2rad(thx), np.deg2rad(thy),
+            thx, thy,
             wavelength,
-            nx=255
+            nx=255, reference=reference
         ).array
     
     xs = np.linspace(-1, 1, opd.shape[0])
@@ -407,4 +411,187 @@ def read_h5_coeffs( fname ):
             
     return lista
 
+def wf_mesh( zk_coeff, n=256 ):
+    """
+    returns a wavefront in a n x n mesh based on the input zernike coefficients
+
+    Parameters
+    ----------
+    zk_coeff : array
+        zernike coefficients, the first coefficient is NOT a dummy as in galsim
+    n : integer, optional
+        DESCRIPTION. The default is 256.
+
+    Returns
+    -------
+    wf : masked array
+        a masked array where the wavefront is valid, e.g. a donut Rinner=0.61
+        fractional up to Router=1.0
+
+    """
+
+    # We need to add the previously removed dummy coefficient 0 to use galsim
+    zk = np.pad( zk_coeff, (1,0), 'empty' )
+
+    xs = np.linspace(-1, 1, n )
+    ys = np.linspace(-1, 1, n)
+    xs, ys = np.meshgrid(xs, ys)
+
+    wf = galsim.zernike.Zernike(zk, R_inner=0.61)(xs, ys)
+    mask = ( ( np.sqrt(xs**2+ys**2) >= 1. ) | ( np.sqrt(xs**2+ys**2) <= 0.61 ) )
+
+    wf = ma.array( wf, mask=mask )
+
+    return wf
+
+def plot_wf( wfarr, title ):
+    """
+    Plot a 2D mesh array.
+
+    Parameters
+    ----------
+    wfarr : 2d array
+        a WF error
+    title : str
+
+    Returns
+    -------
+    None.
+
+    """
+    fig, ax = plt.subplots()
+    im = ax.pcolormesh( wfarr, cmap='jet' )
+    ax.set_aspect('equal', 'box')
+    ax.set_xlabel('x [pix]')
+    ax.set_ylabel('y [pix]')
+    ax.set_title('WF. %s' %title )
+    fig.colorbar(im, ax=ax)
+
+    plt.show()
+    return
+
+def plot_one_psf( one, title ):
+    """
+    plot the array representing a PSF.
+
+    Parameters
+    ----------
+    one : array
+        a psf, tipically the result of a FFT.
+    title : str
+
+    Returns
+    -------
+    None.
+
+    """
+
+    psfnorm = one / one.max()
+
+    fig, ax = plt.subplots()
+    im = ax.pcolormesh( psfnorm, cmap='jet' )
+                  # cmap='jet')
+    # ax.autoscale(False)
+    # ax.axis('equal')
+    ax.set_aspect('equal', 'box')
+    # kk = 10.0e-6  #size of one pixel
+    # kk = 1
+
+    xc = yc = one.shape[0]/2
+    boxsize = 200
+    ax.set_xlim(( xc-boxsize/2, xc+boxsize/2))         # set ROI to -1,1 for both x,y
+    ax.set_ylim((yc-boxsize/2, yc+boxsize/2))
+    ax.set_title('PSF fft. %s' %title )
+    ax.set_xlabel('x [pix]')
+    ax.set_ylabel('y [pix]')
+    fig.colorbar(im, ax=ax)
+
+    plt.show()
+    return
+
+def regular_grid( radius, num=20 ):
+    """
+    Return x, y field angle coordinates filling regularly a grid.
+
+    Parameters
+    ----------
+    radius : float
+        Field of view in degrees
+
+    Returns
+    -------
+    array
+        hx coordinates [deg]
+    array
+        hy coordinates [deg]
+
+    """
+
+    x = np.linspace(-radius*0.95, radius*0.95, num=num )
+    xx, yy = np.meshgrid( x, x )
+
+    ikeep = np.sqrt( xx**2 + yy**2 ) < radius   ##test=prova
+
+    return xx[ikeep].flatten(), yy[ikeep].flatten()
+
+def plot_ellipticity_map( x, y, ellipticity, fov ):
+    """
+    plot a map of ellipticy sticks at field coordinates [deg] x, y
+
+    Parameters
+    ----------
+    x, y : arrays
+        field coordinates in degrees.
+    ellipticity : dictionary containing several lists with the following keys:
+        'sl':           sl,
+        'ss':           ss,
+        'el':           magnitude
+        'pa':           position angle
+        'xc', 'yc':     centroid
+    fov: float
+        maximum field of view to plot
+
+    Returns
+    -------
+    None.
+
+    """
+
+    fig, ax = plt.subplots()
+
+    U = ellipticity['el'] * np.cos( np.deg2rad( ellipticity['pa'] ) )
+    V = ellipticity['el'] * np.sin( np.deg2rad( ellipticity['pa'] ) )
+    M = np.hypot(U, V)
+    ax.quiver( x, y, U, V, M, units='xy', scale=1.5, headwidth=1,
+              headlength=0, headaxislength=0, pivot = 'middle',
+              linewidth=0.8)
+    # ax.scatter( x, y, color='black', s=1)
+
+    # plt.colorbar(label='e')
+    # ax.clim(0.01, 0.12)
+
+    ax.set_xlim(-fov, fov )
+    ax.set_ylim(-fov, fov )
+    ax.set_aspect('equal', 'box')
+    ax.set_title('ellipticity' )
+    ax.set_xlabel('hx [deg]')
+    ax.set_ylabel('hy [deg]')
+
+    plt.show()
     
+def psf_fft_coeffs( coeffs, nx = 360 ):
+    pad_factor = 4
+    # nx = 360
+        
+    wfarr = wf_mesh( coeffs, n=nx  )
+                
+    # wfarr = wf.array
+    pad_size = nx*pad_factor
+    expwf = np.zeros((pad_size, pad_size), dtype=np.complex128)
+    start = pad_size//2-nx//2
+    stop = pad_size//2+nx//2
+    expwf[start:stop, start:stop][~wfarr.mask] = \
+        np.exp(2j*np.pi*wfarr[~wfarr.mask])
+    psf = np.abs(np.fft.fftshift(np.fft.fft2(expwf)))**2
+    
+    return psf

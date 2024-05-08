@@ -100,13 +100,22 @@ class FromBatoid:
     
         
     def zernike_coeffs( self ):
-        #TODO. -> change to use batoid's zernike method.
+        """
+        get zernike coefficients for all coordinates.
+
+        Returns
+        -------
+        znk_arr : ncoords x nznkpupil array
+            We remove the first dummy coefficient. The result is not galsim 
+               compatible.
+        """
         
         znk_arr = []        # collect   nznk x nfield
         for x, y in zip( self.hx, self.hy ):
-            znk = fit_zernike_coefficients( self._telescope, 
-                    np.deg2rad(x), np.deg2rad( y ), self.wl, self.jmax )
-            znk_arr.append( znk )
+            znk = batoid.analysis.zernike( self._telescope, 
+                    np.deg2rad(x), np.deg2rad( y ), 
+                    self.wl, reference='mean', jmax=self.jmax, eps=0.61 )
+            znk_arr.append( znk[1:] )              #we remove dummy coefficient
 
         znk_arr = np.asarray( znk_arr )
         return znk_arr
@@ -117,13 +126,10 @@ class FromBatoid:
         this is giving very different and inconsistent results... why!?
         """
         znk_arr = []
-        
-        
         for x, y in zip( self.hx, self.hy ):
             znk = batoid.analysis.zernike( self._telescope, 
                     np.deg2rad(x), np.deg2rad( y ), 
-                    self.wl, reference='chief', jmax=self.jmax, eps=0.61
-                    )
+                    self.wl, reference='mean', jmax=self.jmax, eps=0.61 )
             znk_arr.append( znk )
 
         znk_arr = np.asarray( znk_arr )
@@ -138,7 +144,7 @@ class FromBatoid:
                     self._telescope,
                     np.deg2rad( x ), np.deg2rad( y ),
                     self.wl,
-                    nx=255
+                    nx=255, reference='mean'
                 )
             wf_arr.append( opd.array )
             # mask_arr.append( opd.array.mask )
@@ -272,15 +278,19 @@ class MisAlignment():
     def __init__( self ):
         self._max_amplitude = np.array([25.0, 1000.0, 1000.0, 25.0, 25.0, 25.0, 4000.0, 4000.0, 25.0, 25.0])
         self.n_dof = len( self._max_amplitude )
-        self.nperturbations = 4
+        self.nperturbations = 8     # even number
         self.list = self.get_dof_list()
         self.zeta = self.get_zeta_arr()
             
     def get_dof_list( self ):
+        assert ( self.nperturbations % 2 ) == 0, 'expected even number of perturbations'
         lista = []
         for i in range( self.n_dof ):
-            zeta_i = np.linspace( 0, self._max_amplitude[i], num = self.nperturbations + 1)[1:]
-            for j in zeta_i:
+            zeta_i = np.linspace( 0, self._max_amplitude[i], num = self.nperturbations//2 + 1)[1:]
+            zeta_j = np.linspace( -self._max_amplitude[i], 0, num = self.nperturbations//2, endpoint=False )
+            zeta_k = np.concatenate( [ zeta_j, zeta_i ] )
+            
+            for j in zeta_k:
                 dof = np.zeros( 50 )
                 dof[ i ] = j
                 lista.append( dof )
@@ -305,11 +315,13 @@ class MisAlignment():
     
         
         """
-
+        assert ( self.nperturbations % 2 ) == 0, 'expected even number of perturbations'
         zeta = np.zeros( (self.nperturbations, self.n_dof ))
     
         for i in range( self.n_dof ):
-            zeta_i = np.linspace( 0, self._max_amplitude[i], num = self.nperturbations + 1)[1:]
-            zeta[:,i] = zeta_i
+            zeta_i = np.linspace( 0, self._max_amplitude[i], num = self.nperturbations//2 + 1)[1:]
+            zeta_j = np.linspace( -self._max_amplitude[i], 0, num = self.nperturbations//2, endpoint=False )
+            zeta_k = np.concatenate( [zeta_j, zeta_i ] )
+            zeta[:,i] = zeta_k
     
         return zeta
