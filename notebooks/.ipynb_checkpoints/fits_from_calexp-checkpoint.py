@@ -6,10 +6,10 @@ import pandas
 pandas.set_option('display.max_rows', 1000)
 from lsst.rsp import get_tap_service, retrieve_query
 
-def fits_from_calexp(seqnum, det, repofolder, folderout):
-
+def fits_from_calexp(seqnum, det, repofolder, folderout, visit_base = 5023071800000):
+    
     collection_dict = collection_dictionary()
-    visit_seqnum = 5023071800000 + seqnum
+    visit_seqnum = visit_base + seqnum
     collection = collection_dict[seqnum]
 
     butler = dafButler.Butler(repofolder, collections=collection)
