@@ -30,7 +30,7 @@ def pixel_to_camera_angle(x, y, det):
     cam_x, cam_y = tx.getMapping().applyForward(np.vstack((x, y)))
     return np.degrees(cam_x.ravel()), np.degrees(cam_y.ravel())
     
-def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_positions, n_grid, fileout=''):
+def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_positions, n_grid=200, fileout=''):
 
     det = calexp.getDetector()
     wcs = calexp.getWcs()
@@ -44,13 +44,14 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     
     if regular_grid_or_star_positions == 0:
         # Per la visualizzazione della PSF su griglia regolare
-        n_grid = n_grid
-        x_array = np.arange(0, calexp.getDimensions()[0], n_grid)
-        y_array = np.arange(0, calexp.getDimensions()[1], n_grid)
+        grid_separation_x = calexp.getDimensions()[0] / n_grid
+        grid_separation_y = calexp.getDimensions()[1] / n_grid
+        x_array = np.arange(n_grid)*grid_separation_x + grid_separation_x/2.
+        y_array = np.arange(n_grid)*grid_separation_y + grid_separation_y/2.
         xx, yy = np.meshgrid(x_array, y_array)
         xx_for_zip = xx.flatten()
         yy_for_zip = yy.flatten()
-        xxshape = xx.shape
+        xxshape = n_grid*n_grid
 
     elif regular_grid_or_star_positions == 1:
         # Per la visualizzazione della PSF sulle coordinate delle stelle
@@ -65,6 +66,8 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
         yy_for_zip = [2000.]
         xxshape = len(xx_for_zip)
 
+    print(xxshape)
+    
     size = []
     i_xx = []
     i_yy = []
@@ -120,7 +123,6 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     ex_star_dvcs = ey #IMPORTANTE INVERTIRE XY TRA CCS e DVCS
     ey_rot_star_dvcs = ex*np.cos(rottelpos_radians) - ey*np.sin(rottelpos_radians) #IMPORTANTE INVERTIRE XY TRA CCS e DVCS
     ex_rot_star_dvcs = ex*np.sin(rottelpos_radians) + ey*np.cos(rottelpos_radians) #IMPORTANTE INVERTIRE XY TRA CCS e DVCS
-
     theta_star_dvcs = np.arctan2(ex, ey) #IMPORTANTE INVERTIRE XY TRA CCS e DVCS
     
     fwhm = []
