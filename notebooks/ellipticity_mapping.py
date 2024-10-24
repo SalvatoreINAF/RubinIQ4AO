@@ -11,7 +11,30 @@ import numpy as np
 import pandas as pd
 from rotation_conversion import rsp_to_rtp
 from lsst.afw import cameraGeom
+import matplotlib.pyplot as plt
+import gc
 
+def remove_figure(fig):
+    """
+    Remove a figure to reduce memory footprint.
+
+    Parameters
+    ----------
+    fig: matplotlib.figure.Figure
+        Figure to be removed.
+
+    Returns
+    -------
+    None
+    """
+    # get the axes and clear their images
+    for ax in fig.get_axes():
+        for im in ax.get_images():
+            im.remove()
+    fig.clf()       # clear the figure
+    plt.close(fig)  # close the figure
+    gc.collect()    # call the garbage collector
+    
 def pixel_to_camera_angle(x, y, det):
     """
     Parameters
@@ -37,11 +60,13 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     visit_id = calexp.info.getVisitInfo().getId()
     
     rotskypos = (calexp.info.getVisitInfo().getBoresightRotAngle()).asDegrees()
-    rottelpos = rsp_to_rtp(rotskypos, calexp.getMetadata().getDouble('RA'), 
-                           calexp.getMetadata().getDouble('DEC'),
-                           calexp.getMetadata().getDouble('MJD')).deg
+    rottelpos = rsp_to_rtp(rotskypos, \
+            (calexp.info.getVisitInfo().getBoresightRaDec())[0].asDegrees(), \
+            (calexp.info.getVisitInfo().getBoresightRaDec())[1].asDegrees(), \
+            calexp.info.getVisitInfo().getDate().toAstropy()).deg
     rottelpos_radians = np.radians(rottelpos)
-    
+
+    # ------------Get the points on grid/star positions (in CCS)------------
     if regular_grid_or_star_positions == 0:
         # Per la visualizzazione della PSF su griglia regolare
         grid_separation_x = calexp.getDimensions()[0] / n_grid
@@ -60,14 +85,14 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
         xx_for_zip = xx
         yy_for_zip = yy
         xxshape = len(xx)
+        fluxes = [l.getPsfInstFlux() for l in sources]        
 
     elif regular_grid_or_star_positions == 2:
         xx_for_zip = [2000.]
         yy_for_zip = [2000.]
         xxshape = len(xx_for_zip)
 
-    print(xxshape)
-    
+    # ------------convert CCS into DVCS and extract moments------------
     size = []
     i_xx = []
     i_yy = []
@@ -108,6 +133,7 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     i_yy = np.reshape(i_yy, xxshape)
     i_xy = np.reshape(i_xy, xxshape)
 
+    # ------------Transform moments into ellipticities------------
     theta = np.arctan2(2. * i_xy, i_xx - i_yy) / 2.
 
     e1 = (i_xx - i_yy) / (i_xx + i_yy)
@@ -133,18 +159,62 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
         fwhm_temp = sigma * pixelScale * 2.355
         fwhm.append(fwhm_temp)
     
-    if fileout != '':
-        df = pd.DataFrame(data={'x_pixel_ccs': xx_for_zip, 'y_pixel_ccs': yy_for_zip, 'e_star': e_star, 
+    if (regular_grid_or_star_positions == 0) | (regular_grid_or_star_positions == 2):
+        if fileout != '':
+            df = pd.DataFrame(data={'x_pixel_ccs': xx_for_zip, 'y_pixel_ccs': yy_for_zip, 'e_star': e_star, 
                                'ex_star_dvcs': ex_star_dvcs, 'ey_star_dvcs': ey_star_dvcs, 
                                 'ex_rot_star_dvcs': ex_rot_star_dvcs, 'ey_rot_star_dvcs': ey_rot_star_dvcs, 
+                                'i_xx': i_xx, 'i_yy': i_yy, 'i_xx': i_xy,  
                                 'e1': e1, 'e2': e2, 'theta_star_dvcs': theta_star_dvcs,
                                 'xx_star_dvcs': xx_star_dvcs, 'yy_star_dvcs': yy_star_dvcs, 
                                 'xx_rot_star_dvcs': xx_rot_star_dvcs, 'yy_rot_star_dvcs': yy_rot_star_dvcs, 
                                 'ra_star_dvcs': ra_star_dvcs, 'dec_star_dvcs': dec_star_dvcs,
-                               'theta_alternate':theta_alternate, 'fwhm': fwhm, 'detector': [det] * len(xx_for_zip), 
+                               'theta_alternate':theta_alternate, 'fwhm': fwhm, 'detector': [det.getId()] * len(xx_for_zip), 
                                'visit_id':  [visit_id] * len(xx_for_zip)})
-        df.to_csv(fileout, index=None)
+            df.to_csv(fileout, index=None)
+            # df['theta_rot_star_dvcs'] = np.degrees(np.arctan2(ex_rot_star_dvcs, ey_rot_star_dvcs))
+            # df[['xx_rot_star_dvcs', 'yy_rot_star_dvcs', 'e_star', 'theta_rot_star_dvcs']].to_csv(fileout+'_for_ricardo', index=None)
     
-    return e_star, ex_star_dvcs, ey_star_dvcs, ex_rot_star_dvcs, ey_rot_star_dvcs, \
-        e1, e2, xx_star_dvcs, yy_star_dvcs, theta_star_dvcs, \
-        xx_rot_star_dvcs, yy_rot_star_dvcs, ra_star_dvcs, dec_star_dvcs, fwhm, size
+        return e_star, ex_star_dvcs, ey_star_dvcs, ex_rot_star_dvcs, ey_rot_star_dvcs, i_xx, i_yy, i_xy, \
+            e1, e2, xx_star_dvcs, yy_star_dvcs, theta_star_dvcs, \
+            xx_rot_star_dvcs, yy_rot_star_dvcs, ra_star_dvcs, dec_star_dvcs, fwhm, size
+
+    elif regular_grid_or_star_positions == 1:
+        if fileout != '':
+            df = pd.DataFrame(data={'x_pixel_ccs': xx_for_zip, 'y_pixel_ccs': yy_for_zip, 'e_star': e_star, 
+                               'ex_star_dvcs': ex_star_dvcs, 'ey_star_dvcs': ey_star_dvcs, 
+                                'ex_rot_star_dvcs': ex_rot_star_dvcs, 'ey_rot_star_dvcs': ey_rot_star_dvcs, 
+                                'i_xx': i_xx, 'i_yy': i_yy, 'i_xx': i_xy,  
+                                'e1': e1, 'e2': e2, 'theta_star_dvcs': theta_star_dvcs,
+                                'xx_star_dvcs': xx_star_dvcs, 'yy_star_dvcs': yy_star_dvcs, 
+                                'xx_rot_star_dvcs': xx_rot_star_dvcs, 'yy_rot_star_dvcs': yy_rot_star_dvcs, 
+                                'ra_star_dvcs': ra_star_dvcs, 'dec_star_dvcs': dec_star_dvcs,
+                               'theta_alternate':theta_alternate, 'fwhm': fwhm, 'fluxes': fluxes, 'detector': [det.getId()] * len(xx_for_zip), 
+                               'visit_id':  [visit_id] * len(xx_for_zip)})
+            df.to_csv(fileout, index=None)
+            # df['theta_rot_star_dvcs'] = np.degrees(np.arctan2(ex_rot_star_dvcs, ey_rot_star_dvcs))
+            # df[['xx_rot_star_dvcs', 'yy_rot_star_dvcs', 'e_star', 'theta_rot_star_dvcs']].to_csv(fileout+'_for_ricardo', index=None)
+    
+        return e_star, ex_star_dvcs, ey_star_dvcs, ex_rot_star_dvcs, ey_rot_star_dvcs, i_xx, i_yy, i_xy, \
+            e1, e2, xx_star_dvcs, yy_star_dvcs, theta_star_dvcs, \
+            xx_rot_star_dvcs, yy_rot_star_dvcs, ra_star_dvcs, dec_star_dvcs, fwhm, size, fluxes
+
+def plot_ellipticitymap(x, y, ex, ey, e, fileout, figure_size_degrees=.5, clim_min=0., clim_max=1., scale=.5):
+        fig = plt.figure(figsize=(10,8))
+        plt.quiver(x, y, ex, ey, e, scale=scale, headlength=0., headwidth=1., pivot='mid', linewidths=.01)
+
+        colorbar = plt.colorbar(label='ellipticity')
+
+        if not 'clim_min' in locals():
+            clim_min=min(e)
+        if not 'clim_max' in locals():
+            clim_max=max(e)
+        plt.clim(clim_min, clim_max)
+        plt.xlim([-figure_size_degrees,figure_size_degrees])
+        plt.ylim([-figure_size_degrees,figure_size_degrees])
+        plt.xlabel('x [deg]')
+        plt.ylabel('y [deg]')
+        plt.title('Ellipticity Sticks')
+        fig.savefig(fileout)
+        remove_figure(fig)
+    
