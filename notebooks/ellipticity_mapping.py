@@ -52,8 +52,13 @@ def pixel_to_camera_angle(x, y, det):
     tx = det.getTransform(cameraGeom.PIXELS, cameraGeom.FIELD_ANGLE)
     cam_x, cam_y = tx.getMapping().applyForward(np.vstack((x, y)))
     return np.degrees(cam_x.ravel()), np.degrees(cam_y.ravel())
-    
-def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_positions, n_grid=200, fileout=''):
+
+def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_positions, 
+                                rotation_sticks=1, do_flip=True, n_grid=200, fileout=''):
+
+    #rotation_sticks= 1: rotazione di entità +rottelpos_radians degli sticks
+    #rotation_sticks= 0: nessuna rotazione degli sticks
+    #rotation_sticks=-1: rotazione di entità -rottelpos_radians degli sticks
 
     det = calexp.getDetector()
     wcs = calexp.getWcs()
@@ -65,6 +70,13 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
             (calexp.info.getVisitInfo().getBoresightRaDec())[1].asDegrees(), \
             calexp.info.getVisitInfo().getDate().toAstropy()).deg
     rottelpos_radians = np.radians(rottelpos)
+
+    if rotation_sticks==1:
+        rottelpos_radians_for_ellipticitysticks = rottelpos_radians
+    elif rotation_sticks==0:
+        rottelpos_radians_for_ellipticitysticks = 0.
+    elif rotation_sticks==-1:
+        rottelpos_radians_for_ellipticitysticks = -rottelpos_radians
 
     # ------------Get the points on grid/star positions (in CCS)------------
     if regular_grid_or_star_positions == 0:
@@ -92,6 +104,7 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
         yy_for_zip = [2000.]
         xxshape = len(xx_for_zip)
 
+
     # ------------convert CCS into DVCS and extract moments------------
     size = []
     i_xx = []
@@ -107,7 +120,7 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     dec_star_dvcs = []
 
     for x, y in zip(xx_for_zip, yy_for_zip):
-        point = Point2D(x, y)
+        point = Point2D(x, y)        
         coo = wcs.pixelToSky(x, y)
         cam_x, cam_y = pixel_to_camera_angle(point[0], point[1], det)
         xx_rot = np.asarray(cam_x[0])*np.cos(rottelpos_radians) - \
@@ -121,13 +134,21 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
         i_yy.append(shape.getIyy())
         i_xy.append(shape.getIxy())
         points.append(point)
-        xx_star_dvcs.append(cam_y[0]) #IMPORTANTE INVERTIRE XY TRA CCS E DVCS
-        yy_star_dvcs.append(cam_x[0]) #IMPORTANTE INVERTIRE XY TRA CCS E DVCS
-        xx_rot_star_dvcs.append(yy_rot) #IMPORTANTE INVERTIRE XY TRA CCS E DVCS
-        yy_rot_star_dvcs.append(xx_rot) #IMPORTANTE INVERTIRE XY TRA CCS E DVCS
-        ra_star_dvcs.append(coo[1].asDegrees())
-        dec_star_dvcs.append(coo[0].asDegrees())
 
+        if do_flip:
+            xx_star_dvcs.append(cam_y[0])
+            yy_star_dvcs.append(cam_x[0])
+            xx_rot_star_dvcs.append(yy_rot)
+            yy_rot_star_dvcs.append(xx_rot)
+        else:
+            xx_star_dvcs.append(cam_x[0])
+            yy_star_dvcs.append(cam_y[0])
+            xx_rot_star_dvcs.append(xx_rot)
+            yy_rot_star_dvcs.append(yy_rot)
+
+        ra_star_dvcs.append(coo[0].asDegrees())
+        dec_star_dvcs.append(coo[1].asDegrees())
+        
     size = np.reshape(size, xxshape)
     i_xx = np.reshape(i_xx, xxshape)
     i_yy = np.reshape(i_yy, xxshape)
@@ -145,11 +166,28 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     e_star = np.sqrt(e1**2 + e2**2)
     ex = e_star * np.cos(theta)
     ey = e_star * np.sin(theta)
-    ey_star_dvcs = ex #IMPORTANTE INVERTIRE XY TRA CCS e DVCS
-    ex_star_dvcs = ey #IMPORTANTE INVERTIRE XY TRA CCS e DVCS
-    ey_rot_star_dvcs = ex*np.cos(rottelpos_radians) - ey*np.sin(rottelpos_radians) #IMPORTANTE INVERTIRE XY TRA CCS e DVCS
-    ex_rot_star_dvcs = ex*np.sin(rottelpos_radians) + ey*np.cos(rottelpos_radians) #IMPORTANTE INVERTIRE XY TRA CCS e DVCS
-    theta_star_dvcs = np.arctan2(ex, ey) #IMPORTANTE INVERTIRE XY TRA CCS e DVCS
+
+    if do_flip:
+    # --- Con rotazione e inversione XY degli stick--- (_try0)
+        ey_star_dvcs = ex
+        ex_star_dvcs = ey
+        ey_rot_star_dvcs = ex*np.cos(rottelpos_radians_for_ellipticitysticks) - ey*np.sin(rottelpos_radians_for_ellipticitysticks)
+        ex_rot_star_dvcs = ex*np.sin(rottelpos_radians_for_ellipticitysticks) + ey*np.cos(rottelpos_radians_for_ellipticitysticks)
+    else:
+    # --- Con rotazione negativa senza inversione XY degli stick--- (_try1)
+        ey_star_dvcs = ey
+        ex_star_dvcs = ex
+        ex_rot_star_dvcs = ex*np.cos(rottelpos_radians_for_ellipticitysticks) - ey*np.sin(rottelpos_radians_for_ellipticitysticks)
+        ey_rot_star_dvcs = ex*np.sin(rottelpos_radians_for_ellipticitysticks) + ey*np.cos(rottelpos_radians_for_ellipticitysticks)
+    
+    theta_star_dvcs = np.arctan2(ey, ex)
+
+    # # --- Senza rotazione e inversione XY degli stick---
+    # ey_star_dvcs = ey
+    # ex_star_dvcs = ex
+    # ex_rot_star_dvcs = ex*np.cos(rottelpos_radians) - ey*np.sin(rottelpos_radians)
+    # ey_rot_star_dvcs = ex*np.sin(rottelpos_radians) + ey*np.cos(rottelpos_radians)
+    # theta_star_dvcs = np.arctan2(ey, ex)
     
     fwhm = []
     # FWHM

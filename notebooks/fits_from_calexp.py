@@ -1,4 +1,6 @@
 import lsst.daf.butler as dafButler
+import sys
+sys.path.append("/sdf/data/rubin/shared/image_quality/imsim/notebooks/")
 from collection_dictionary_shared import collection_dictionary
 
 # Import packages for  Catalog Access

@@ -1,0 +1,143 @@
+*** SEQNUM ***
+0: niente effetti, solo stella al centro (imsim-user_provacentro.yaml)
+1: niente di niente (imsim-user_provacentro_vuoto.yaml)
+3: griglia 5x5 senza effetti (imsim-user_noeffects_grid.yaml)
+4: griglia 15x15 senza effetti (imsim-user_noeffects_grid_15x15.yaml)
+5: griglia 15x15 solo con dark current (imsim-user_eff0_grid_15x15.yaml)
+6: griglia 15x15 solo con background diverso da 0 (imsim-user_eff1_grid_15x15.yaml)
+10: Intero piano focale, no distorsioni, solo dark current, griglia da instance_catalog_seqnum10 (ma ha ancora la charge diffusion)
+
+16: Intero piano focale, no distorsioni, solo dark current, psf=0.7, griglia da instance_catalog_seqnum16
+17: Intero piano focale, no distorsioni, solo dark current, psf=2.0, griglia da instance_catalog_seqnum17
+18: det 94, 75, 178, 132, no distorsioni, solo dark current, psf=0.7, M2 rx = 60, griglia da instance_catalog_seqnum0018
+19: det 94, 75, 178, 132, no distorsioni, solo dark current, psf=0.7, M2 rx = 120, griglia da instance_catalog_seqnum0019
+
+20: det 94, 75, 178, 132, no distorsioni, solo dark current, psf=0.7, altezza=20, griglia da instance_catalog_seqnum0020
+21: det 94, 75, 178, 132, no distorsioni, solo dark current, psf=0.7, M2 rx = 60, altezza=20, griglia da instance_catalog_seqnum0021
+22: det 94, 75, 178, 132, no distorsioni, solo dark current, psf=0.7, M2 rx = 120, altezza=20, griglia da instance_catalog_seqnum0022
+
+23: det 94, 75, 178, 132, no distorsioni, solo dark current, psf=0.7, altezza=30, griglia da instance_catalog_seqnum0023
+24: det 94, 75, 178, 132, no distorsioni, solo dark current, psf=0.7, M2 rx = 60, altezza=30, griglia da instance_catalog_seqnum0024
+25: det 94, 75, 178, 132, no distorsioni, solo dark current, psf=0.7, M2 rx = 120, altezza=30, griglia da instance_catalog_seqnum0025
+
+26: det 94, 75, 178, 132, no distorsioni, solo dark current, psf=0.7, altezza=90, griglia da instance_catalog_seqnum0026
+27: det 94, 75, 178, 132, no distorsioni, solo dark current, psf=0.7, M2 rx = 60, altezza=90, griglia da instance_catalog_seqnum0027
+28: det 94, 75, 178, 132, no distorsioni, solo dark current, psf=0.7, M2 rx = 120, altezza=90, griglia da instance_catalog_seqnum0028
+
+29: Intero piano focale, no distorsioni, NO dark current, psf=0.7, griglia da instance_catalog_seqnum29
+30: come 16... mi serve per capire se riesco a passarci i pipetask
+
+31: come 16 ma con perturbazione M2 rx = 15
+32: come 16 ma con perturbazione M2 rx = 30
+
+33: come 16, solo det 94 ma dark current 0, noise.variance 1, solo 1 oggetto
+34: come 30, solo det 94, rottelpos = 90, sia in config che in instance
+35: come 30, solo det 94, rottelpos = 45, sia in config che in instance
+
+36: Niente effetti solo variance=5, solo [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude originale, rot=0
+37: Niente effetti solo variance=5, solo [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude originale, rot=45
+38: Niente effetti solo variance=5, solo [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude originale, rot=90
+39: Niente effetti solo variance=5, solo [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude 30, rot=0
+40: Niente effetti solo variance=5, solo [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude 30, rot=45
+41: Niente effetti solo variance=5, solo [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude 30, rot=90
+42: Niente effetti solo variance=5, solo [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude 90, rot=0
+43: Niente effetti solo variance=5, solo [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude 90, rot=45
+44: Niente effetti solo variance=5, solo [168, 178, 188, 123, 132, 142, 152, 161, 75, 84, 94, 104, 113, 27, 36, 46, 56, 65, 0, 10, 20], altitude 90, rot=90
+
+45: come 42 ma con i dof 3 e 4 = 10 (abortito causa impossibilità di pipetaskare)
+
+50: come 33 ma riesco a ingestarlo....
+51: come 42 ma con i dof 3 e 4 = 10
+52: prova come 51
+53: tutti i detector, con seeing=0.5, dof0=30 dof3=20 dof4=10, allo zenith
+54, 55, 56: prove per tempo di calcolo galsim
+
+57: come 53, dof0=0
+58: come 53, dof0=-30
+59: tutti i detector, seeing=0.5, dof4=15, zenith
+
+60: come 59, test per seqnum solo in .yaml
+61: come 59, detector [168, 178, 84, 94, 10, 20] per seqnum solo in .yaml
+
+80: test sottoposto alla community, sta dando molti problemi... RISOLTO 240406
+81: tentativo di saturate, non sta funzionando...
+82: Una saturata e una non saturata per Marcella, solo det 94, niente perturbazioni (ATTENZIONE, C'È IL TRUCCO: STO USANDO LA GRIGLIA E NON USANDO LO STAMP NEL .YAML)
+
+83:     Simulare una PSF (VÀ BENE ANCHE GRIGLIA) al centro di ciascuno dei 3 detector numero 36, 56 e 143 (che dovrebbero formare su per giù un triangolo e posizionati non troppo al bordo da essere vignettati); impostare un seeing pari a 0.5; impostare un vettore di DOF di tutti zeri tranne: DOF[0] = -10; DOF[10] = 0.2; DOF[11] = -0.05, rot=0
+84: come 83, ma rot=30
+85: come 83, ma rot=60
+86: come 83, ma rot=90
+
+87: come 83 ma senza distorsioni: voglio vedere se l'angolo di rotazione estratto dalle pipeline è 0 (o 180) e non 178... E' SEMPRE 178
+88: come 87 ma con uno spostamento di 150 micron in dx di M2... INUTILE PER ORA
+89: come 87  [36, 56, 143] ma ruotato 30°
+90: come 87 ma tutti i detector e ruotato 0° (SBAGLIATO!!! ho ruotato di 30)
+
+91: catalogo sparso, tutti i detector, ruotato 0°, no perturbazioni
+92: come 91, [36, 56, 143], ruotato 30° 
+93: griglia meno fitta, tutti i detector, ruotato 0°, no perturbazioni, su griglia random: TROPPO POCHE STELLE E LA PSF NON RIESCE
+94: come 93, [36, 56, 143], ruotato 30° , su griglia random: TROPPO POCHE STELLE E LA PSF NON RIESCE
+
+95: come 59, ma su griglia meno fitta e ruotato 30° e su [36, 56, 143]
+
+96: DOF[6]=40, catalogo sparso, tutti i detector, rotazione 0
+97: DOF[6]=40, catalogo sparso, [36, 56, 143], rotazione 30
+98: come 92 ma ruotato 60°
+99: come 97 ma ruotato 60°
+
+100:  DOF[0]=100, DOF[3]=-15, DOF[5]=-20, DOF[8]=30, DOF[14]=-30, DOF[37]=150, catalogo sparso, tutti i detector, rotazione 0, catalogo sparso; NON FUNZIONA CHARACTERIZEIMAGE (NON TROVA LE PSF)
+101: come 100, [36, 56, 143], rotazione 30; NON FUNZIONA CHARACTERIZEIMAGE (NON TROVA LE PSF)
+102: come 100, [36, 56, 143], rotazione 60; NON FUNZIONA CHARACTERIZEIMAGE (NON TROVA LE PSF)
+
+103: come 91 ma senza photonDCR
+104: come 92 ma senza photonDCR
+105: come 98 ma senza photonDCR
+
+106: come 91, ComCam
+107 [in imsim_2024_20_headerfix]: come 91, ComCam SOVRASCRITTO PER SBAGLIO!!
+
+REINSERIRE EFFETTI
+108: come 91, reinserita elettronica, prova su solo 8 detector
+109: come 91, reinserita atmosfera, prova su solo 1 detector
+110: come 91, reinserito sky, prova su solo 1 detector
+111: come 91, reinseriti treerings, prova su solo 1 detector
+112: come 110
+113: come 91, reinserito xxx, prova su solo 1 detector
+
+115 [REMOVED]: reinserita elettronica, atmosfera, sky, treerings, raggi cosmici, 1 detector
+115: reinserita elettronica, atmosfera, sky, treerings, raggi cosmici, 189 detector, distorsioni 0, rotazione 0, banda r
+
+116: come 115 ma con griglia più fitta, 189 detector, distorsioni 0, rotazione 0, banda r
+117: come 116, 189 detector, M2rx=22.5, rotazione 0, banda r
+118: come 116, 189 detector, Cdx=1750, rotazione 0, banda r
+119: come 117, 189 detector, M2rx=22.5, rotazione 30, banda r
+
+120: come 118, detector [90,91,92,93,94,95,96,97,98], Cdx=1750, rotazione 30, banda r
+
+121: come 116, detector [90,91,92,93,94,95,96,97,98], Cdy=1750, rotazione 0, banda r
+122: come 121, rotazione 30
+123: come 116, detector [90,91,92,93,94,95,96,97,98], M2ry=22.5, rotazione 0, banda r
+124: come 123, rotazione 30
+125: come 116, detector [90,91,92,93,94,95,96,97,98], M2dz=30, rotazione 0, banda r
+126: come 125, rotazione 30
+127: come 116, detector [90,91,92,93,94,95,96,97,98], M2dx=800, rotazione 0, banda r
+128: come 127, rotazione 30
+129: come 116, detector [90,91,92,93,94,95,96,97,98], M2dy=800, rotazione 0, banda r
+130: come 129, rotazione 30
+131: come 116, detector [90,91,92,93,94,95,96,97,98], Cdz=30, rotazione 0, banda r
+132: come 131, rotazione 30
+133: come 116, detector [90,91,92,93,94,95,96,97,98], Crx=30, rotazione 0, banda r
+134: come 133, rotazione 30
+135: come 116, detector [90,91,92,93,94,95,96,97,98], Cry=30, rotazione 0, banda r
+136: come 135, rotazione 30
+
+137: come 129, detector [117-125]
+138: come 130, detector [117-125]
+
+139: come 123, M2ry=45
+140: come 124, M2ry=45
+
+141: come 127, M2dx=1600
+142: come 128, M2dx=1600
+143: come 129, M2dy=1600
+144: come 130, M2dy=1600
