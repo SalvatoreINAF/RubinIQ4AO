@@ -237,7 +237,7 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
             e1, e2, xx_star_dvcs, yy_star_dvcs, theta_star_dvcs, \
             xx_rot_star_dvcs, yy_rot_star_dvcs, ra_star_dvcs, dec_star_dvcs, fwhm, size, fluxes
 
-def plot_ellipticitymap(x, y, ex, ey, e, fileout, figure_size_degrees=.5, clim_min=0., clim_max=1., scale=.5):
+def plot_ellipticitymap(x, y, ex, ey, e, visitid_complete, fileout, figure_size_degrees=.5, clim_min=0., clim_max=1., scale=.5):
         fig = plt.figure(figsize=(10,8))
         plt.quiver(x, y, ex, ey, e, scale=scale, headlength=0., headwidth=1., pivot='mid', linewidths=.01)
 
@@ -252,7 +252,7 @@ def plot_ellipticitymap(x, y, ex, ey, e, fileout, figure_size_degrees=.5, clim_m
         plt.ylim([-figure_size_degrees,figure_size_degrees])
         plt.xlabel('x [deg]')
         plt.ylabel('y [deg]')
-        plt.title('Ellipticity Sticks')
+        plt.title('Ellipticity Sticks {:13d}'.format(visitid_complete))
         fig.savefig(fileout)
         remove_figure(fig)
     

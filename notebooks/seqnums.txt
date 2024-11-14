@@ -150,3 +150,12 @@ REINSERIRE EFFETTI
 150: come 139, M2dy=2400
 151: come 125, M2dz=90
 152: come 126, M2dz=90
+
+145: come 139, M2ry=67.5
+146: come 140, M2ry=67.5
+147: come 139, M2dx=2400
+148: come 139, M2dx=2400
+149: come 139, M2dy=2400
+150: come 139, M2dy=2400
+151: come 125, M2dz=90
+152: come 126, M2dz=90
