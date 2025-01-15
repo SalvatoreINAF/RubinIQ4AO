@@ -223,8 +223,6 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
             # Rotazioni con aaRot, tutte sbagliate???
             ex_rot_star_dvcs = aaRot[0, 0] * ex + aaRot[0, 1] * ey
             ey_rot_star_dvcs = aaRot[1, 0] * ex + aaRot[1, 1] * ey
-            
-
     
     theta_star_dvcs = np.arctan2(ey, ex)
 

@@ -157,3 +157,4 @@ REINSERIRE EFFETTI
 155: come 125, atmosfera spenta
 156: come 125, altitude 30
 157: come 125, altitude 90
+158: come 125, pressione 0
