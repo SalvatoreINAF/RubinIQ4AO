@@ -141,3 +141,20 @@ REINSERIRE EFFETTI
 142: come 128, M2dx=1600
 143: come 129, M2dy=1600
 144: come 130, M2dy=1600
+
+145: come 139, M2ry=67.5
+146: come 140, M2ry=67.5
+147: come 139, M2dx=2400
+148: come 139, M2dx=2400
+149: come 139, M2dy=2400
+150: come 139, M2dy=2400
+151: come 125, M2dz=90
+152: come 126, M2dz=90
+
+153: come 140 (quindi unica differenza è la realizzazione del noise) ELIMINATA
+153: come 125, altitude 30 CANCELLATA
+154: come 125, altitude 90 CANCELLATA
+155: come 125, atmosfera spenta
+156: come 125, altitude 30
+157: come 125, altitude 90
+158: come 125, pressione 0

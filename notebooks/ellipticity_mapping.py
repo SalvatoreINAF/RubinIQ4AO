@@ -6,7 +6,8 @@ import lsst.daf.base as dafBase
 from lsst.daf.butler import Butler
 import lsst.afw.image as afwImage
 import lsst.afw.table as afwTable
-from lsst.geom import Point2D
+from lsst.afw.geom.ellipses import Quadrupole
+from lsst.geom import Point2D, LinearTransform
 import numpy as np
 import pandas as pd
 from rotation_conversion import rsp_to_rtp
@@ -59,6 +60,7 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     #rotation_sticks= 1: rotazione di entità +rottelpos_radians degli sticks
     #rotation_sticks= 0: nessuna rotazione degli sticks
     #rotation_sticks=-1: rotazione di entità -rottelpos_radians degli sticks
+    #rotation_sticks=2: rotazione alla Josh con Quadrupole
 
     det = calexp.getDetector()
     wcs = calexp.getWcs()
@@ -71,12 +73,20 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
             calexp.info.getVisitInfo().getDate().toAstropy()).deg
     rottelpos_radians = np.radians(rottelpos)
 
-    if rotation_sticks==1:
+    if rotation_sticks>=1:
         rottelpos_radians_for_ellipticitysticks = rottelpos_radians
     elif rotation_sticks==0:
         rottelpos_radians_for_ellipticitysticks = 0.
     elif rotation_sticks==-1:
         rottelpos_radians_for_ellipticitysticks = -rottelpos_radians
+
+    crtp = np.cos(rottelpos_radians)
+    srtp = np.sin(rottelpos_radians)
+
+    # aa sta per Alt-Azimuth, trasformazione da codice di Josh:
+    # https://github.com/lsst-sitcom/summit_extras/blob/main/python/lsst/summit/extras/plotting/psfPlotting.py
+    aaRot = np.array([[crtp, srtp], [-srtp, crtp]]) @ np.array([[0, 1], [1, 0]]) @ np.array([[-1, 0], [0, 1]])
+    transform_for_ell = LinearTransform(aaRot)
 
     # ------------Get the points on grid/star positions (in CCS)------------
     if regular_grid_or_star_positions == 0:
@@ -97,13 +107,15 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
         xx_for_zip = xx
         yy_for_zip = yy
         xxshape = len(xx)
-        fluxes = [l.getPsfInstFlux() for l in sources]        
+        fluxes = [l.getPsfInstFlux() for l in sources]
+
+        # xx_fpposition = sources['base_FPPosition_x']
+        # yy_fpposition = sources['base_FPPosition_y']
 
     elif regular_grid_or_star_positions == 2:
         xx_for_zip = [2000.]
         yy_for_zip = [2000.]
         xxshape = len(xx_for_zip)
-
 
     # ------------convert CCS into DVCS and extract moments------------
     size = []
@@ -123,10 +135,13 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
         point = Point2D(x, y)        
         coo = wcs.pixelToSky(x, y)
         cam_x, cam_y = pixel_to_camera_angle(point[0], point[1], det)
-        xx_rot = np.asarray(cam_x[0])*np.cos(rottelpos_radians) - \
-                                np.asarray(cam_y[0])*np.sin(rottelpos_radians)
-        yy_rot = np.asarray(cam_x[0])*np.sin(rottelpos_radians) + \
-                                np.asarray(cam_y[0])*np.cos(rottelpos_radians)
+        x0, y0 = np.asarray(cam_x[0]), np.asarray(cam_y[0])
+        # Rotazioni mie
+        # xx_rot = x0*crtp - y0*srtp
+        # yy_rot = x0*srtp + y0*crtp
+        # Rotazioni Josh
+        xx_rot = aaRot[0, 0] * x0 + aaRot[0, 1] * y0
+        yy_rot = aaRot[1, 0] * x0 + aaRot[1, 1] * y0
 
         shape = psf.computeShape(point)
         size.append(shape.getTraceRadius())
@@ -154,6 +169,8 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     i_yy = np.reshape(i_yy, xxshape)
     i_xy = np.reshape(i_xy, xxshape)
 
+    table_moments = {'Ixx': i_xx, 'Iyy': i_yy, 'Ixy': i_xy}
+
     # ------------Transform moments into ellipticities------------
     theta = np.arctan2(2. * i_xy, i_xx - i_yy) / 2.
 
@@ -168,17 +185,44 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     ey = e_star * np.sin(theta)
 
     if do_flip:
-    # --- Con rotazione e inversione XY degli stick--- (_try0)
+    # --- Con inversione XY degli stick---
+        # Rotazioni mie
         ey_star_dvcs = ex
         ex_star_dvcs = ey
-        ey_rot_star_dvcs = ex*np.cos(rottelpos_radians_for_ellipticitysticks) - ey*np.sin(rottelpos_radians_for_ellipticitysticks)
-        ex_rot_star_dvcs = ex*np.sin(rottelpos_radians_for_ellipticitysticks) + ey*np.cos(rottelpos_radians_for_ellipticitysticks)
+        crtp_e = np.cos(rottelpos_radians_for_ellipticitysticks)
+        srtp_e = np.sin(rottelpos_radians_for_ellipticitysticks)
+        ey_rot_star_dvcs = ex*crtp_e - ey*srtp_e
+        ex_rot_star_dvcs = ex*srtp_e + ey*crtp_e
     else:
-    # --- Con rotazione negativa senza inversione XY degli stick--- (_try1)
+    # --- Senza inversione XY degli stick---
         ey_star_dvcs = ey
         ex_star_dvcs = ex
-        ex_rot_star_dvcs = ex*np.cos(rottelpos_radians_for_ellipticitysticks) - ey*np.sin(rottelpos_radians_for_ellipticitysticks)
-        ey_rot_star_dvcs = ex*np.sin(rottelpos_radians_for_ellipticitysticks) + ey*np.cos(rottelpos_radians_for_ellipticitysticks)
+
+        # Rotazioni mie
+        # ex_rot_star_dvcs = ex*crtp_e - ey*srtp_e
+        # ey_rot_star_dvcs = ex*srtp_e + ey*crtp_e
+
+        if rotation_sticks==2:
+            # Rotazioni Josh (Quadrupole)
+            rot_shapes = []
+            for i_xx1, i_yy1, i_xy1 in zip(i_xx, i_yy, i_xy):
+                shape = Quadrupole(i_xx1, i_yy1, i_xy1)
+                rot_shapes.append(shape.transform(transform_for_ell))
+                
+            aaIxx = np.asarray([sh.getIxx() for sh in rot_shapes])
+            aaIyy = np.asarray([sh.getIyy() for sh in rot_shapes])
+            aaIxy = np.asarray([sh.getIxy() for sh in rot_shapes])
+            e1_rot_star_dvcs = (aaIxx - aaIyy) / (aaIxx + aaIyy)
+            e2_rot_star_dvcs = 2 * aaIxy / (aaIxx + aaIyy)    
+            
+            theta_josh = np.arctan2(e2_rot_star_dvcs, e1_rot_star_dvcs) / 2.
+            e_star = np.sqrt(e1_rot_star_dvcs**2 + e2_rot_star_dvcs**2)
+            ex_rot_star_dvcs = e_star * np.cos(theta_josh)
+            ey_rot_star_dvcs = e_star * np.sin(theta_josh)
+        else:
+            # Rotazioni con aaRot, tutte sbagliate???
+            ex_rot_star_dvcs = aaRot[0, 0] * ex + aaRot[0, 1] * ey
+            ey_rot_star_dvcs = aaRot[1, 0] * ex + aaRot[1, 1] * ey
     
     theta_star_dvcs = np.arctan2(ey, ex)
 
@@ -237,7 +281,7 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
             e1, e2, xx_star_dvcs, yy_star_dvcs, theta_star_dvcs, \
             xx_rot_star_dvcs, yy_rot_star_dvcs, ra_star_dvcs, dec_star_dvcs, fwhm, size, fluxes
 
-def plot_ellipticitymap(x, y, ex, ey, e, fileout, figure_size_degrees=.5, clim_min=0., clim_max=1., scale=.5):
+def plot_ellipticitymap(x, y, ex, ey, e, visitid_complete, fileout, figure_size_degrees=.5, clim_min=0., clim_max=1., scale=.5):
         fig = plt.figure(figsize=(10,8))
         plt.quiver(x, y, ex, ey, e, scale=scale, headlength=0., headwidth=1., pivot='mid', linewidths=.01)
 
@@ -252,7 +296,7 @@ def plot_ellipticitymap(x, y, ex, ey, e, fileout, figure_size_degrees=.5, clim_m
         plt.ylim([-figure_size_degrees,figure_size_degrees])
         plt.xlabel('x [deg]')
         plt.ylabel('y [deg]')
-        plt.title('Ellipticity Sticks')
+        plt.title('Ellipticity Sticks {:13d}'.format(visitid_complete))
         fig.savefig(fileout)
         remove_figure(fig)
     
