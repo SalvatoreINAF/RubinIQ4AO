@@ -107,7 +107,7 @@ REINSERIRE EFFETTI
 115 [REMOVED]: reinserita elettronica, atmosfera, sky, treerings, raggi cosmici, 1 detector
 115: reinserita elettronica, atmosfera, sky, treerings, raggi cosmici, 189 detector, distorsioni 0, rotazione 0, banda r
 
-116: come 115 ma con griglia più fitta, 189 detector, distorsioni 0, rotazione 0, banda r
+116: come 115 ma con griglia stars_catalog_sparse_0045_noheader.txt, 189 detector, distorsioni 0, rotazione 0, banda r
 117: come 116, 189 detector, M2rx=22.5, rotazione 0, banda r
 118: come 116, 189 detector, Cdx=1750, rotazione 0, banda r
 119: come 117, 189 detector, M2rx=22.5, rotazione 30, banda r
@@ -158,3 +158,6 @@ REINSERIRE EFFETTI
 156: come 125, altitude 30
 157: come 125, altitude 90
 158: come 125, pressione 0
+
+159: griglia stars_catalog_sparse_0045_noheader.txt, 189 detector, rotazione 0, altezza 75°, banda r, M2dz=30
+160: come 159, pressione 0
