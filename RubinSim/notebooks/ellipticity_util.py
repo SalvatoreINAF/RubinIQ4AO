@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.geom import Point2D
-from lsst.summit.extras.plotting.psfPlotting import randomRows, addColorbarToAxes
+from lsst.summit.extras.plotting.psfPlotting import randomRows, addColorbarToAxes, extendTable
 import numpy as np
 from astropy.io import ascii
 
@@ -35,7 +35,7 @@ from astropy.io import ascii
 
 #         return np.degrees(field_x), np.degrees(field_y)
 
-def addFieldCoords_to_Table( table, camera, rot ):
+def addFieldCoords_to_Table( table, camera ):
     """Extend the given table with additional columns.
 
     Parameters
@@ -54,6 +54,8 @@ def addFieldCoords_to_Table( table, camera, rot ):
     """
     field_points = []
     field_points_rot = []
+
+    rot = table.meta['ocRot']
     
     for row in table:
         point = Point2D(row['slot_Centroid_x'], row['slot_Centroid_y'])
@@ -67,10 +69,10 @@ def addFieldCoords_to_Table( table, camera, rot ):
     table['field_y'] = [ np.rad2deg( point.y ) for point in field_points ]
     table['field_x'].unit='deg'
     table['field_y'].unit='deg'
-    table['aa_field_x'] = [ np.rad2deg( point.flatten()[0] ) for point in field_points_rot ]
-    table['aa_field_y'] = [ np.rad2deg( point.flatten()[1] ) for point in field_points_rot ]
-    table['aa_field_x'].unit='deg'
-    table['aa_field_y'].unit='deg'
+    table['oc_field_x'] = [ np.rad2deg( point.flatten()[0] ) for point in field_points_rot ]
+    table['oc_field_y'] = [ np.rad2deg( point.flatten()[1] ) for point in field_points_rot ]
+    table['oc_field_x'].unit='deg'
+    table['oc_field_y'].unit='deg'
 
     # table[prefix + "_x"] = rot[0, 0] * table["x"] + rot[0, 1] * table["y"]
     # table[prefix + "_y"] = rot[1, 0] * table["x"] + rot[1, 1] * table["y"]
@@ -129,29 +131,29 @@ def makeOCSPlot(
 
     table = randomRows(table, maxPoints)
 
-    cbar = addColorbarToAxes(axes[0, 0].scatter(table["aa_field_x"], table["aa_field_y"], c=table["T"], s=5))
+    cbar = addColorbarToAxes(axes[0, 0].scatter(table["oc_field_x"], table["oc_field_y"], c=table["T"], s=5))
     cbar.set_label("T [arcsec$^2$]")
 
     emax = np.quantile(np.abs(np.concatenate([table["e1"], table["e2"]])), 0.98)
     cbar = addColorbarToAxes(
         axes[1, 0].scatter(
-            table["aa_field_x"], table["aa_field_y"], c=table["aa_e1"], vmin=-emax, vmax=emax, cmap="bwr", s=5
+            table["oc_field_x"], table["oc_field_y"], c=table["oc_e1"], vmin=-emax, vmax=emax, cmap="bwr", s=5
         )
     )
     cbar.set_label("e1")
 
     cbar = addColorbarToAxes(
         axes[1, 1].scatter(
-            table["aa_field_x"], table["aa_field_y"], c=table["aa_e2"], vmin=-emax, vmax=emax, cmap="bwr", s=5
+            table["oc_field_x"], table["oc_field_y"], c=table["oc_e2"], vmin=-emax, vmax=emax, cmap="bwr", s=5
         )
     )
     cbar.set_label("e2")
 
     Q = axes[0, 1].quiver(
-        table["aa_field_x"],
-        table["aa_field_y"],
-        table["e"] * np.cos(0.5 * np.arctan2(table["aa_e2"], table["aa_e1"])),
-        table["e"] * np.sin(0.5 * np.arctan2(table["aa_e2"], table["aa_e1"])),
+        table["oc_field_x"],
+        table["oc_field_y"],
+        table["e"] * np.cos(0.5 * np.arctan2(table["oc_e2"], table["oc_e1"])),
+        table["e"] * np.sin(0.5 * np.arctan2(table["oc_e2"], table["oc_e1"])),
         headlength=0,
         headaxislength=0,
         scale=quiverScale,
@@ -170,7 +172,7 @@ def makeOCSPlot(
     # otherwise it is overwhelming
     
     if oneRaftOnly:
-        aaRot = table.meta["aaRot"]
+        aaRot = table.meta["ocRot"]
         for det in camera:
             xs = []
             ys = []
@@ -242,13 +244,16 @@ def read_batoid_table( fname ):
     table["e2_mod"] = 2 * table["mod_mxy"] / table["T_mod"]
     table["e_mod"] = np.hypot(table["e1_mod"], table["e2_mod"])
 
-    
-
     return table
     
+def addOpticalCoords_to_Table( table ):
+    # We call extendTable to add the optical system coordinate system which is almost aa but with an extra flip of the original X axis.
 
+    ocRot = table.meta["aaRot"] @ np.array([[-1, 0], [0, 1]])
+    table = extendTable(table, ocRot, 'oc' )
+    table.meta["ocRot"] = ocRot
 
-
+    return table
 
 
 
