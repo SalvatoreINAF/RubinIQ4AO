@@ -145,9 +145,9 @@ REINSERIRE EFFETTI
 145: come 139, M2ry=67.5
 146: come 140, M2ry=67.5
 147: come 139, M2dx=2400
-148: come 139, M2dx=2400
+148: come 140, M2dx=2400
 149: come 139, M2dy=2400
-150: come 139, M2dy=2400
+150: come 140, M2dy=2400
 151: come 125, M2dz=90
 152: come 126, M2dz=90
 
@@ -161,3 +161,20 @@ REINSERIRE EFFETTI
 
 159: griglia stars_catalog_sparse_0045_noheader.txt, 189 detector, rotazione 0, altezza 75°, banda r, M2dz=30
 160: come 159, pressione 0
+161: come 159, M2dz=-30
+162: come 161, pressione 0
+163: come 159, Cry=30
+164: come 163, pressione 0
+165: come 159, M2dx=1000
+166: come 165, pressione 0
+
+167: come 125, no photonDCR (BRUCIATO)
+168: come 125, no photonDCR
+169: come 116, no photonDCR, M2dz=30
+170: come 116, no photonDCR, Cdy=-2600
+171: come 116, no photonDCR, M2x=800
+172: come 116, no photonDCR, Crx=-30
+173: come 116, no photonDCR, M2Rx=30
+174: come 116, no photonDCR, Cdz=-20
+175: come 158, altezza 25 anche in instance_catalog
+176: come 172, Crx=30, Cry=15
