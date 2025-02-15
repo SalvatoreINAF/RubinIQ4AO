@@ -249,7 +249,7 @@ def read_batoid_table( fname ):
 def addOpticalCoords_to_Table( table ):
     # We call extendTable to add the optical system coordinate system which is almost aa but with an extra flip of the original X axis.
 
-    ocRot = table.meta["aaRot"] @ np.array([[-1, 0], [0, 1]])
+    ocRot = np.array([[1, 0], [0, -1]]) @ table.meta["aaRot"]
     table = extendTable(table, ocRot, 'oc' )
     table.meta["ocRot"] = ocRot
 
