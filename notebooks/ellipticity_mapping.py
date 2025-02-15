@@ -14,6 +14,7 @@ from rotation_conversion import rsp_to_rtp
 from lsst.afw import cameraGeom
 import matplotlib.pyplot as plt
 import gc
+from atm_dispersion_correction_per_vittorio_v2 import compute_atm_dispersion
 
 def remove_figure(fig):
     """
@@ -55,7 +56,8 @@ def pixel_to_camera_angle(x, y, det):
     return np.degrees(cam_x.ravel()), np.degrees(cam_y.ravel())
 
 def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_positions, 
-                                rotation_sticks=1, do_flip=True, n_grid=200, fileout=''):
+                                rotation_sticks=1, do_flip=True, do_ad_correction=True, 
+                                zenith_angle=0., pressure=727, temperature=6.85, n_grid=200, fileout=''):
 
     #rotation_sticks= 1: rotazione di entità +rottelpos_radians degli sticks
     #rotation_sticks= 0: nessuna rotazione degli sticks
@@ -65,6 +67,8 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     det = calexp.getDetector()
     wcs = calexp.getWcs()
     visit_id = calexp.info.getVisitInfo().getId()
+
+    passband = calexp.getInfo().getFilter().bandLabel
     
     rotskypos = (calexp.info.getVisitInfo().getBoresightRotAngle()).asDegrees()
     rottelpos = rsp_to_rtp(rotskypos, \
@@ -185,7 +189,7 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     ey = e_star * np.sin(theta)
 
     if do_flip:
-    # --- Con inversione XY degli stick---
+    # --- Con inversione XY degli stick--- OBSOLETE!!!!
         # Rotazioni mie
         ey_star_dvcs = ex
         ex_star_dvcs = ey
@@ -194,7 +198,7 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
         ey_rot_star_dvcs = ex*crtp_e - ey*srtp_e
         ex_rot_star_dvcs = ex*srtp_e + ey*crtp_e
     else:
-    # --- Senza inversione XY degli stick---
+    # --- Senza inversione XY degli stick--- DEFAULT!!!!
         ey_star_dvcs = ey
         ex_star_dvcs = ex
 
@@ -212,6 +216,10 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
             aaIxx = np.asarray([sh.getIxx() for sh in rot_shapes])
             aaIyy = np.asarray([sh.getIyy() for sh in rot_shapes])
             aaIxy = np.asarray([sh.getIxy() for sh in rot_shapes])
+
+            if do_ad_correction:
+                aaIyy = aaIyy - compute_atm_dispersion(zenith_angle, passband, pression=pressure, temperature=temperature)
+            
             e1_rot_star_dvcs = (aaIxx - aaIyy) / (aaIxx + aaIyy)
             e2_rot_star_dvcs = 2 * aaIxy / (aaIxx + aaIyy)    
             
@@ -226,13 +234,6 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     
     theta_star_dvcs = np.arctan2(ey, ex)
 
-    # # --- Senza rotazione e inversione XY degli stick---
-    # ey_star_dvcs = ey
-    # ex_star_dvcs = ex
-    # ex_rot_star_dvcs = ex*np.cos(rottelpos_radians) - ey*np.sin(rottelpos_radians)
-    # ey_rot_star_dvcs = ex*np.sin(rottelpos_radians) + ey*np.cos(rottelpos_radians)
-    # theta_star_dvcs = np.arctan2(ey, ex)
-    
     fwhm = []
     # FWHM
     for point in points:
@@ -258,7 +259,7 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
             # df[['xx_rot_star_dvcs', 'yy_rot_star_dvcs', 'e_star', 'theta_rot_star_dvcs']].to_csv(fileout+'_for_ricardo', index=None)
     
         return e_star, ex_star_dvcs, ey_star_dvcs, ex_rot_star_dvcs, ey_rot_star_dvcs, i_xx, i_yy, i_xy, \
-            e1, e2, xx_star_dvcs, yy_star_dvcs, theta_star_dvcs, \
+            aaIxx, aaIxy, aaIyy, e1, e2, xx_star_dvcs, yy_star_dvcs, theta_star_dvcs, \
             xx_rot_star_dvcs, yy_rot_star_dvcs, ra_star_dvcs, dec_star_dvcs, fwhm, size
 
     elif regular_grid_or_star_positions == 1:
@@ -278,7 +279,7 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
             # df[['xx_rot_star_dvcs', 'yy_rot_star_dvcs', 'e_star', 'theta_rot_star_dvcs']].to_csv(fileout+'_for_ricardo', index=None)
     
         return e_star, ex_star_dvcs, ey_star_dvcs, ex_rot_star_dvcs, ey_rot_star_dvcs, i_xx, i_yy, i_xy, \
-            e1, e2, xx_star_dvcs, yy_star_dvcs, theta_star_dvcs, \
+            aaIxx, aaIxy, aaIyy, e1, e2, xx_star_dvcs, yy_star_dvcs, theta_star_dvcs, \
             xx_rot_star_dvcs, yy_rot_star_dvcs, ra_star_dvcs, dec_star_dvcs, fwhm, size, fluxes
 
 def plot_ellipticitymap(x, y, ex, ey, e, visitid_complete, fileout, figure_size_degrees=.5, clim_min=0., clim_max=1., scale=.5):
@@ -299,4 +300,3 @@ def plot_ellipticitymap(x, y, ex, ey, e, visitid_complete, fileout, figure_size_
         plt.title('Ellipticity Sticks {:13d}'.format(visitid_complete))
         fig.savefig(fileout)
         remove_figure(fig)
-    
