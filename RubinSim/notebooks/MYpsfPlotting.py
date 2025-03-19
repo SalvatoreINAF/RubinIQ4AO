@@ -39,17 +39,12 @@ import numpy as np
 from astropy.table import vstack
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import pandas as pd
+import numpy as np
+from astropy.table import Table
 
-from lsst.afw import cameraGeom
 from lsst.afw.cameraGeom import FOCAL_PLANE
 from lsst.afw.geom.ellipses import Quadrupole
-from lsst.geom import LinearTransform, radians, Point2D
-
-import astropy.units as u
-from astropy.coordinates import AltAz, Angle, EarthLocation, SkyCoord
-from astropy.time import Time
-
-from astropy.table import Table
+from lsst.geom import LinearTransform, radians
 
 if TYPE_CHECKING:
     from typing import Any
@@ -62,140 +57,7 @@ if TYPE_CHECKING:
     from lsst.afw.image import VisitInfo
     from lsst.afw.table import SourceCatalog
 
-def pseudo_parallactic_angle(
-    ra: float,
-    dec: float,
-    mjd: float,
-    lon: float = -70.7494,
-    lat: float = -30.2444,
-    height: float = 2650.0,
-    pressure: float = 750.0,
-    temperature: float = 11.5,
-    relative_humidity: float = 0.4,
-    obswl: float = 1.0,
-):
-    """Compute the pseudo parallactic angle.
 
-    The (traditional) parallactic angle is the angle zenith - coord - NCP
-    where NCP is the true-of-date north celestial pole.  This function instead
-    computes zenith - coord - NCP_ICRF where NCP_ICRF is the north celestial
-    pole in the International Celestial Reference Frame.
-
-    Parameters
-    ----------
-    ra, dec : float
-        ICRF coordinates in degrees.
-    mjd : float
-        Modified Julian Date.
-    latitude, longitude : float
-        Geodetic coordinates of observer in degrees.
-    height : float
-        Height of observer above reference ellipsoid in meters.
-    pressure : float
-        Atmospheric pressure in millibars.
-    temperature : float
-        Atmospheric temperature in degrees Celsius.
-    relative_humidity : float
-    obswl : float
-        Observation wavelength in microns.
-
-    Returns
-    -------
-    ppa : float
-        The pseudo parallactic angle in degrees.
-    """
-    obstime = Time(mjd, format="mjd", scale="tai")
-    location = EarthLocation.from_geodetic(
-        lon=lon * u.deg,
-        lat=lat * u.deg,
-        height=height * u.m,
-        ellipsoid="WGS84",  # For concreteness
-    )
-
-    coord_kwargs = dict(
-        obstime=obstime,
-        location=location,
-        pressure=pressure * u.mbar,
-        temperature=temperature * u.deg_C,
-        relative_humidity=relative_humidity,
-        obswl=obswl * u.micron,
-    )
-
-    coord = SkyCoord(ra * u.deg, dec * u.deg, **coord_kwargs)
-
-    towards_zenith = SkyCoord(
-        alt=coord.altaz.alt + 10 * u.arcsec,
-        az=coord.altaz.az,
-        frame=AltAz,
-        **coord_kwargs
-    )
-
-    towards_north = SkyCoord(
-        ra=coord.icrs.ra, dec=coord.icrs.dec + 10 * u.arcsec, **coord_kwargs
-    )
-
-    ppa = coord.position_angle(towards_zenith) - coord.position_angle(towards_north)
-    return ppa.wrap_at(180 * u.deg).deg
-    
-def rsp_to_rtp(rotSkyPos: float, ra: float, dec: float, mjd: float, **kwargs: dict):
-    """Convert RotTelPos -> RotSkyPos.
-
-    Parameters
-    ----------
-    rotSkyPos : float
-        Sky rotation angle in degrees.
-    ra, dec : float
-        ICRF coordinates in degrees.
-    mjd : float
-        Modified Julian Date.
-    **kwargs : dict
-        Other keyword arguments to pass to pseudo_parallactic_angle.  Defaults
-        are generally appropriate for Rubin Observatory.
-
-    Returns
-    -------
-    rsp : float
-        RotSkyPos in degrees.
-    """
-    q = pseudo_parallactic_angle(ra, dec, mjd, **kwargs)
-    return Angle((270 - rotSkyPos + q)*u.deg).wrap_at(180 * u.deg)
-
-def pixel_to_camera(x, y, det):
-    """
-    Parameters
-    ----------
-    x, y : array
-        Pixel coordinates.
-    det : lsst.afw.cameraGeom.Detector
-        Detector of interest.
-    Returns
-    -------
-    cam_x, cam_y : array
-        Focal plane position in millimeters in DVCS
-        See https://lse-349.lsst.io/
-    """
-    tx = det.getTransform(cameraGeom.PIXELS, cameraGeom.FOCAL_PLANE)
-    cam_x, cam_y = tx.getMapping().applyForward(np.vstack((x, y)))
-    return cam_x.ravel(), cam_y.ravel()
-    
-def pixel_to_camera_angle(x, y, det):
-    """
-    Parameters
-    ----------
-    x, y : array
-        Pixel coordinates.lsst afw.detectordetectordetectordetector
-    det : lsst.afw.cameraGeom.Detector
-        Detector of interest.
-    Returns
-    -------
-    cam_x, cam_y : array
-        Focal plane position in degrees in DVCS
-        See https://lse-349.lsst.io/
-    """
-    tx = det.getTransform(cameraGeom.PIXELS, cameraGeom.FIELD_ANGLE)
-    cam_x, cam_y = tx.getMapping().applyForward(np.vstack((x, y)))
-    return np.degrees(cam_x.ravel()), np.degrees(cam_y.ravel())
-    
 def randomRows(table: Table, maxRows: int) -> Table:
     """Select a random subset of rows from the given table.
 
@@ -268,7 +130,6 @@ def makeTableFromSourceCatalogs(icSrcs: dict[int, SourceCatalog], visitInfo: Vis
         tables.append(icSrc)
 
     table = vstack(tables)
-
     # Add shape columns
     table["Ixx"] = table["slot_Shape_xx"] * (0.2) ** 2
     table["Ixy"] = table["slot_Shape_xy"] * (0.2) ** 2
@@ -299,181 +160,6 @@ def makeTableFromSourceCatalogs(icSrcs: dict[int, SourceCatalog], visitInfo: Vis
 
     return table
 
-def makeTableFromGrid(n_grid, calexp, psf, visitInfo: VisitInfo) -> Table:
-    """Extract the shapes from a grid into an astropy table.
-
-    The shapes of the PSF candidates are extracted from the source catalogs and
-    transformed into the required coordinate systems for plotting either focal
-    plane coordinates, az/el coordinates, or equatorial coordinates.
-
-    Parameters
-    ----------
-    visitInfo : `lsst.afw.image.VisitInfo`
-        The visit information for a representative visit.
-
-    Returns
-    -------
-    table : `astropy.table.Table`
-        The table containing the data from the source catalogs.
-    """
-
-    # # From wcs (come per griglia mio notebook)
-    # wcs = calexp.getWcs()
-    # rotskypos = (calexp.info.getVisitInfo().getBoresightRotAngle()).asDegrees()
-    # rottelpos = rsp_to_rtp(rotskypos, \
-    #         (calexp.info.getVisitInfo().getBoresightRaDec())[0].asDegrees(), \
-    #         (calexp.info.getVisitInfo().getBoresightRaDec())[1].asDegrees(), \
-    #         calexp.info.getVisitInfo().getDate().toAstropy()).deg
-    # rottelpos_radians = np.radians(rottelpos)
-    # crtp = np.cos(rottelpos_radians)
-    # srtp = np.sin(rottelpos_radians)
-
-    # From icsrc
-    rottelpos_radians = (visitInfo.boresightParAngle - visitInfo.boresightRotAngle - (np.pi / 2 * radians)).asRadians()
-    rotskypos_radians = visitInfo.boresightRotAngle.asRadians()
-    crtp = np.cos(rottelpos_radians)
-    srtp = np.sin(rottelpos_radians)
-
-    # print('Rotskypos [rad]:', np.radians(rotskypos))
-    # print('Rottelpos [rad]:', rottelpos_radians)
-    # print('Rotskypos2 [rad]:', rotskypos2_radians)
-    # print('Rottelpos2 [rad]:', rottelpos2_radians + 2*np.pi)
-        
-    # aa sta per Alt-Azimuth, trasformazione da codice di Josh:
-    # https://github.com/lsst-sitcom/summit_extras/blob/main/python/lsst/summit/extras/plotting/psfPlotting.py
-    aaRot = np.array([[crtp, srtp], [-srtp, crtp]]) @ np.array([[0, 1], [1, 0]]) @ np.array([[-1, 0], [0, 1]])
-    transform_for_ell = LinearTransform(aaRot)
-    # print(aaRot)
-
-    grid_separation_x = calexp.getDimensions()[0] / n_grid
-    grid_separation_y = calexp.getDimensions()[1] / n_grid
-    x_array = np.arange(n_grid)*grid_separation_x + grid_separation_x/2.
-    y_array = np.arange(n_grid)*grid_separation_y + grid_separation_y/2.
-    xx, yy = np.meshgrid(x_array, y_array)
-    xx_for_zip = xx.flatten()
-    yy_for_zip = yy.flatten()
-    xxshape = n_grid*n_grid
-
-    # print('sss2')
-    
-    size = []
-    i_xx = []
-    i_yy = []
-    i_xy = []
-    points = []
-
-    xx_star_dvcs = []
-    yy_star_dvcs = []
-    xx_rot_star_dvcs = []
-    yy_rot_star_dvcs = []
-    ra_star_dvcs = []
-    dec_star_dvcs = []
-
-    cam_x_mm_all = []
-    cam_y_mm_all = []
-
-    det = calexp.getDetector()
-    wcs = calexp.getWcs()
-    
-    for x, y in zip(xx_for_zip, yy_for_zip):
-        point = Point2D(x, y)        
-        coo = wcs.pixelToSky(x, y)
-        cam_x, cam_y = pixel_to_camera_angle(point[0], point[1], det)
-        cam_x_mm, cam_y_mm = pixel_to_camera(point[0], point[1], det)
-        x0, y0 = np.asarray(cam_x[0]), np.asarray(cam_y[0])
-        # Rotazioni Josh
-        xx_rot = aaRot[0, 0] * x0 + aaRot[0, 1] * y0
-        yy_rot = aaRot[1, 0] * x0 + aaRot[1, 1] * y0
-
-        cam_x_mm_all.append(cam_x_mm)
-        cam_y_mm_all.append(cam_y_mm)
-        
-        shape = psf.computeShape(point)
-        size.append(shape.getTraceRadius())
-        i_xx.append(shape.getIxx())
-        i_yy.append(shape.getIyy())
-        i_xy.append(shape.getIxy())
-        points.append(point)
-
-        xx_star_dvcs.append(cam_x[0])
-        yy_star_dvcs.append(cam_y[0])
-        xx_rot_star_dvcs.append(xx_rot)
-        yy_rot_star_dvcs.append(yy_rot)
-
-        ra_star_dvcs.append(coo[0].asDegrees())
-        dec_star_dvcs.append(coo[1].asDegrees())
-        
-    size = np.reshape(size, xxshape)
-    i_xx = np.reshape(i_xx, xxshape)
-    i_yy = np.reshape(i_yy, xxshape)
-    i_xy = np.reshape(i_xy, xxshape)
-
-    table_moments = {'Ixx': i_xx, 'Iyy': i_yy, 'Ixy': i_xy}
-    # print('sss3')
-
-    # ------------Transform moments into ellipticities------------
-    theta = np.arctan2(2. * i_xy, i_xx - i_yy) / 2.
-
-    e1 = (i_xx - i_yy) / (i_xx + i_yy)
-    e2 = (2. * i_xy) / (i_xx + i_yy)
-    
-    theta_alternate = np.arctan2(e2, e1) / 2.
-    assert np.allclose(theta, theta_alternate)
-
-    e_star = np.sqrt(e1**2 + e2**2)
-    ex = e_star * np.cos(theta)
-    ey = e_star * np.sin(theta)
-
-    ey_star_dvcs = ey
-    ex_star_dvcs = ex
-
-    # Rotazioni Josh (Quadrupole)
-    rot_shapes = []
-    for i_xx1, i_yy1, i_xy1 in zip(i_xx, i_yy, i_xy):
-        shape = Quadrupole(i_xx1, i_yy1, i_xy1)
-        rot_shapes.append(shape.transform(transform_for_ell))
-        
-    aaIxx = np.asarray([sh.getIxx() for sh in rot_shapes])
-    aaIyy = np.asarray([sh.getIyy() for sh in rot_shapes])
-    aaIxy = np.asarray([sh.getIxy() for sh in rot_shapes])
-    e1_rot_star_dvcs = (aaIxx - aaIyy) / (aaIxx + aaIyy)
-    e2_rot_star_dvcs = 2 * aaIxy / (aaIxx + aaIyy)    
-    
-    theta_josh = np.arctan2(e2_rot_star_dvcs, e1_rot_star_dvcs) / 2.
-    e_star = np.sqrt(e1_rot_star_dvcs**2 + e2_rot_star_dvcs**2)
-    ex_rot_star_dvcs = e_star * np.cos(theta_josh)
-    ey_rot_star_dvcs = e_star * np.sin(theta_josh)
-    
-    theta_star_dvcs = np.arctan2(ey, ex)
-
-    table = Table()
-    # Add shape columns
-    table["Ixx"] = i_xx
-    table["Ixy"] = i_xy
-    table["Iyy"] = i_yy
-    table["T"] = i_xx + i_yy
-    table["e1"] = (table["Ixx"] - table["Iyy"]) / table["T"]
-    table["e2"] = 2 * table["Ixy"] / table["T"]
-    table["e"] = np.hypot(table["e1"], table["e2"])
-
-    table["x"] = cam_x_mm_all
-    table["y"] = cam_y_mm_all
-
-    table.meta["rotTelPos"] = (
-        visitInfo.boresightParAngle - visitInfo.boresightRotAngle - (np.pi / 2 * radians)
-    ).asRadians()
-    table.meta["rotSkyPos"] = visitInfo.boresightRotAngle.asRadians()
-
-    table = extendTable(table, aaRot, "aa")
-    table.meta["aaRot"] = aaRot
-
-    rsp = table.meta["rotSkyPos"]
-    srsp, crsp = np.sin(rsp), np.cos(rsp)
-    nwRot = np.array([[crsp, -srsp], [srsp, crsp]])
-    table = extendTable(table, nwRot, "nw")
-    table.meta["nwRot"] = nwRot
-
-    return table
 
 def extendTable(table: Table, rot: npt.NDArray[np.float_], prefix: str) -> Table:
     """Extend the given table with additional columns for the rotated shapes.
@@ -875,3 +561,85 @@ def makeAzElPlot(
     fig.tight_layout()
     if saveAs:
         fig.savefig(saveAs)
+
+
+def MakeGridMedianPSF(table, nx, ny, min_cell):
+    
+# Build the grid
+    min_x = min(table['oc_field_x'])
+    min_y = min(table['oc_field_y'])
+    max_x = max(table['oc_field_x'])
+    max_y = max(table['oc_field_y'])
+
+    step_x = (max_x - min_x) / nx
+    step_y = (max_y - min_y) / ny
+
+    x_array = min_x + step_x * (np.arange(nx) + .5)
+    y_array = min_y + step_y * (np.arange(ny) + .5)
+
+    xx, yy = np.meshgrid(x_array, y_array)
+    xx_for_zip = xx.flatten()
+    yy_for_zip = yy.flatten()
+
+    Ixx_oc_grid = []
+    Iyy_oc_grid = []
+    Ixy_oc_grid = []
+    oc_grid_x_median = []
+    oc_grid_y_median = []
+    n_stars_in_cells = []
+    grid_id = []
+    all_ids = []
+    
+    iii = 0
+    for x, y in zip(xx_for_zip, yy_for_zip):
+
+        # Search sources within each cell
+        ind_temp = (table['oc_field_x'] > (x - step_x/2.)) & (table['oc_field_x'] <= (x + step_x/2.)) & (table['oc_field_y'] > (y - step_y/2.)) & (table['oc_field_y'] <= (y + step_y/2.))
+        itemindex = np.where(ind_temp == True)
+        n_stars_in_cell = len(itemindex[0])
+
+        # grid_id.append([iii]*n_stars_in_cell)
+        # ids = table['id'][itemindex]
+        # all_ids.append(ids)
+        
+        oc_grid_x_median.append(np.median(table['oc_field_x'][itemindex]))
+        oc_grid_y_median.append(np.median(table['oc_field_y'][itemindex]))
+        n_stars_in_cells.append(n_stars_in_cell)
+
+        # assign median moments to the grid
+        if n_stars_in_cell >= min_cell:
+            Ixx_oc_grid.append(np.median(table['oc_Ixx'][itemindex]))
+            Iyy_oc_grid.append(np.median(table['oc_Iyy'][itemindex]))
+            Ixy_oc_grid.append(np.median(table['oc_Ixy'][itemindex]))
+        else:
+            Ixx_oc_grid.append(np.median(np.nan))
+            Iyy_oc_grid.append(np.median(np.nan))
+            Ixy_oc_grid.append(np.median(np.nan))
+
+        iii = iii + 1
+
+    # print(grid_id.flatten())
+    # print(all_ids.flatten())
+    
+    table_grid = Table()
+
+    table_grid["oc_grid_id"] = np.arange(yy_for_zip.size)
+              
+    table_grid["oc_grid_x"] = xx_for_zip
+    table_grid["oc_grid_y"] = yy_for_zip
+              
+    table_grid["oc_grid_x_median"] = oc_grid_x_median
+    table_grid["oc_grid_y_median"] = oc_grid_y_median
+
+    table_grid["n_stars_in_cells"] = n_stars_in_cells
+    
+    table_grid["oc_grid_Ixx"] = Ixx_oc_grid
+    table_grid["oc_grid_Ixy"] = Ixy_oc_grid
+    table_grid["oc_grid_Iyy"] = Iyy_oc_grid
+              
+    table_grid["oc_grid_T"] = table_grid["oc_grid_Ixx"] + table_grid["oc_grid_Iyy"]
+    table_grid["oc_grid_e1"] = (table_grid["oc_grid_Ixx"] - table_grid["oc_grid_Iyy"]) / table_grid["oc_grid_T"]
+    table_grid["oc_grid_e2"] = 2 * table_grid["oc_grid_Ixy"] / table_grid["oc_grid_T"]
+    table_grid["oc_grid_e"] = np.hypot(table_grid["oc_grid_e1"], table_grid["oc_grid_e2"])
+
+    return table_grid

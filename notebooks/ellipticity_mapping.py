@@ -90,6 +90,7 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     # aa sta per Alt-Azimuth, trasformazione da codice di Josh:
     # https://github.com/lsst-sitcom/summit_extras/blob/main/python/lsst/summit/extras/plotting/psfPlotting.py
     aaRot = np.array([[crtp, srtp], [-srtp, crtp]]) @ np.array([[0, 1], [1, 0]]) @ np.array([[-1, 0], [0, 1]])
+    ocRot = np.array([[1, 0], [0, -1]]) @ aaRot # Rotazione Ricardo
     transform_for_ell = LinearTransform(aaRot)
 
     # ------------Get the points on grid/star positions (in CCS)------------
@@ -132,9 +133,11 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
     yy_star_dvcs = []
     xx_rot_star_dvcs = []
     yy_rot_star_dvcs = []
+    xx_ocrot_star = []
+    yy_ocrot_star = []
     ra_star_dvcs = []
     dec_star_dvcs = []
-
+    
     for x, y in zip(xx_for_zip, yy_for_zip):
         point = Point2D(x, y)        
         coo = wcs.pixelToSky(x, y)
@@ -146,6 +149,8 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
         # Rotazioni Josh
         xx_rot = aaRot[0, 0] * x0 + aaRot[0, 1] * y0
         yy_rot = aaRot[1, 0] * x0 + aaRot[1, 1] * y0
+        xx_ocrot = ocRot[0, 0] * x0 + ocRot[0, 1] * y0
+        yy_ocrot = ocRot[1, 0] * x0 + ocRot[1, 1] * y0
 
         shape = psf.computeShape(point)
         size.append(shape.getTraceRadius())
@@ -164,10 +169,12 @@ def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_posit
             yy_star_dvcs.append(cam_y[0])
             xx_rot_star_dvcs.append(xx_rot)
             yy_rot_star_dvcs.append(yy_rot)
+            xx_ocrot_star.append(xx_ocrot)
+            yy_ocrot_star.append(yy_ocrot)
 
         ra_star_dvcs.append(coo[0].asDegrees())
         dec_star_dvcs.append(coo[1].asDegrees())
-        
+
     size = np.reshape(size, xxshape)
     i_xx = np.reshape(i_xx, xxshape)
     i_yy = np.reshape(i_yy, xxshape)

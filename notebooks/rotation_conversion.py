@@ -2,7 +2,6 @@ import astropy.units as u
 from astropy.coordinates import AltAz, Angle, EarthLocation, SkyCoord
 from astropy.time import Time
 
-
 def pseudo_parallactic_angle(
     ra: float,
     dec: float,

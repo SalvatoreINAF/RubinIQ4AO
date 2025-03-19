@@ -354,7 +354,7 @@ def makeTableFromGrid(n_grid, calexp, psf, visitInfo: VisitInfo) -> Table:
     yy_for_zip = yy.flatten()
     xxshape = n_grid*n_grid
 
-    print('sss2')
+    # print('sss2')
     
     size = []
     i_xx = []
@@ -409,7 +409,7 @@ def makeTableFromGrid(n_grid, calexp, psf, visitInfo: VisitInfo) -> Table:
     i_xy = np.reshape(i_xy, xxshape)
 
     table_moments = {'Ixx': i_xx, 'Iyy': i_yy, 'Ixy': i_xy}
-    print('sss3')
+    # print('sss3')
 
     # ------------Transform moments into ellipticities------------
     theta = np.arctan2(2. * i_xy, i_xx - i_yy) / 2.
