@@ -15,6 +15,7 @@ from lsst.geom import Point2D
 from lsst.summit.extras.plotting.psfPlotting import randomRows, addColorbarToAxes, extendTable
 import numpy as np
 from astropy.io import ascii
+from astropy.table import Table
 
 # def calcFieldXY(self):
 #         """
@@ -255,6 +256,105 @@ def addOpticalCoords_to_Table( table ):
 
     return table
 
+def MakeGridMedianPSF(table, nx, ny, min_cell):
+    """Builds a table, in OC coordinates, where the PSF moments are stored
+    on a grid (both regular and with weighted coordinates).
 
+    Parameters
+    ----------
+    table : `astropy.table.Table`
+        The input table containing the original shapes.
+    nx : `int`
+        The number of points of the grid to be created on the OC x axis.
+    ny : `int`
+        The number of points of the grid to be created on the OC y axis.
+    min_cell : `int`
+        The minimum number of stars in the cell around the x,y positions in the grid. 
+        If the number of star is smaller than min_cell, no median will be performed. 
+        
+    Returns
+    -------
+    table_grid : `astropy.table.Table`
+        The new table with gridded medians.
+    """
+    
+# Build the grid
+    min_x = min(table['oc_field_x'])
+    min_y = min(table['oc_field_y'])
+    max_x = max(table['oc_field_x'])
+    max_y = max(table['oc_field_y'])
+
+    step_x = (max_x - min_x) / nx
+    step_y = (max_y - min_y) / ny
+
+    x_array = min_x + step_x * (np.arange(nx) + .5)
+    y_array = min_y + step_y * (np.arange(ny) + .5)
+
+    xx, yy = np.meshgrid(x_array, y_array)
+    xx_for_zip = xx.flatten()
+    yy_for_zip = yy.flatten()
+
+    Ixx_oc_grid = []
+    Iyy_oc_grid = []
+    Ixy_oc_grid = []
+    oc_grid_x_median = []
+    oc_grid_y_median = []
+    n_stars_in_cells = []
+    grid_id = []
+    all_ids = []
+    
+    iii = 0
+    for x, y in zip(xx_for_zip, yy_for_zip):
+
+        # Search sources within each cell
+        ind_temp = (table['oc_field_x'] > (x - step_x/2.)) & (table['oc_field_x'] <= (x + step_x/2.)) & (table['oc_field_y'] > (y - step_y/2.)) & (table['oc_field_y'] <= (y + step_y/2.))
+        itemindex = np.where(ind_temp == True)
+        n_stars_in_cell = len(itemindex[0])
+
+        # grid_id.append([iii]*n_stars_in_cell)
+        # ids = table['id'][itemindex]
+        # all_ids.append(ids)
+        
+        oc_grid_x_median.append(np.median(table['oc_field_x'][itemindex]))
+        oc_grid_y_median.append(np.median(table['oc_field_y'][itemindex]))
+        n_stars_in_cells.append(n_stars_in_cell)
+
+        # assign median moments to the grid
+        if n_stars_in_cell >= min_cell:
+            Ixx_oc_grid.append(np.median(table['oc_Ixx'][itemindex]))
+            Iyy_oc_grid.append(np.median(table['oc_Iyy'][itemindex]))
+            Ixy_oc_grid.append(np.median(table['oc_Ixy'][itemindex]))
+        else:
+            Ixx_oc_grid.append(np.median(np.nan))
+            Iyy_oc_grid.append(np.median(np.nan))
+            Ixy_oc_grid.append(np.median(np.nan))
+
+        iii = iii + 1
+
+    # print(grid_id.flatten())
+    # print(all_ids.flatten())
+    
+    table_grid = Table()
+
+    table_grid["oc_grid_id"] = np.arange(yy_for_zip.size)
+              
+    table_grid["oc_grid_x"] = xx_for_zip
+    table_grid["oc_grid_y"] = yy_for_zip
+              
+    table_grid["oc_grid_x_median"] = oc_grid_x_median
+    table_grid["oc_grid_y_median"] = oc_grid_y_median
+
+    table_grid["n_stars_in_cells"] = n_stars_in_cells
+    
+    table_grid["oc_grid_Ixx"] = Ixx_oc_grid
+    table_grid["oc_grid_Ixy"] = Ixy_oc_grid
+    table_grid["oc_grid_Iyy"] = Iyy_oc_grid
+              
+    table_grid["oc_grid_T"] = table_grid["oc_grid_Ixx"] + table_grid["oc_grid_Iyy"]
+    table_grid["oc_grid_e1"] = (table_grid["oc_grid_Ixx"] - table_grid["oc_grid_Iyy"]) / table_grid["oc_grid_T"]
+    table_grid["oc_grid_e2"] = 2 * table_grid["oc_grid_Ixy"] / table_grid["oc_grid_T"]
+    table_grid["oc_grid_e"] = np.hypot(table_grid["oc_grid_e1"], table_grid["oc_grid_e2"])
+
+    return table_grid
 
     

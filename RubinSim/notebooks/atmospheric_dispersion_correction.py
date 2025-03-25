@@ -119,7 +119,22 @@ def addADC_to_Table(table, elevation_angle, filter, pressure=800, temperature=15
     zenith_angle = 90 - elevation_angle
     correction_factor = compute_atm_dispersion(zenith_angle, filter, pressure, temperature)
 
+    # Create columns for the uncorrected moments
+    table['aa_unc_Ixx'] = table['aa_Ixx']
+    table['aa_unc_Ixy'] = table['aa_Ixy']
+    table['aa_unc_Iyy'] = table['aa_Iyy']
+    table['aa_unc_e1'] = table['aa_e1']
+    table['aa_unc_e2'] = table['aa_e2']
+    table['aa_unc_x'] = table['aa_x']
+    table['aa_unc_y'] = table['aa_y']
+    
     # Add the correction factor to the 'aa_Iyy' column in place
-    table['aa_Iyy'] = table['aa_Iyy'] - correction_factor
+    table['aa_Iyy'] = table['aa_unc_Iyy'] - correction_factor
+
+    # Recalculate the ellipticities with the corrected yy component
+    table["aa_T"] = table["aa_Ixx"] + table["aa_Iyy"]
+    table["aa_e1"] = (table["aa_Ixx"] - table["aa_Iyy"]) / table["aa_T"]
+    table["aa_e2"] = 2 * table["aa_Ixy"] / table["aa_T"]
+    table["aa_e"] = np.hypot(table["aa_e1"], table["aa_e2"])
 
     return table
