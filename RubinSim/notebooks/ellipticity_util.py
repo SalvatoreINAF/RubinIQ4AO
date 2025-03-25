@@ -70,10 +70,10 @@ def addFieldCoords_to_Table( table, camera ):
     table['field_y'] = [ np.rad2deg( point.y ) for point in field_points ]
     table['field_x'].unit='deg'
     table['field_y'].unit='deg'
-    table['oc_field_x'] = [ np.rad2deg( point.flatten()[0] ) for point in field_points_rot ]
-    table['oc_field_y'] = [ np.rad2deg( point.flatten()[1] ) for point in field_points_rot ]
-    table['oc_field_x'].unit='deg'
-    table['oc_field_y'].unit='deg'
+    table['oc_grid_x'] = [ np.rad2deg( point.flatten()[0] ) for point in field_points_rot ]
+    table['oc_grid_y'] = [ np.rad2deg( point.flatten()[1] ) for point in field_points_rot ]
+    table['oc_grid_x'].unit='deg'
+    table['oc_grid_y'].unit='deg'
 
     # table[prefix + "_x"] = rot[0, 0] * table["x"] + rot[0, 1] * table["y"]
     # table[prefix + "_y"] = rot[1, 0] * table["x"] + rot[1, 1] * table["y"]
@@ -132,29 +132,29 @@ def makeOCSPlot(
 
     table = randomRows(table, maxPoints)
 
-    cbar = addColorbarToAxes(axes[0, 0].scatter(table["oc_field_x"], table["oc_field_y"], c=table["T"], s=5))
+    cbar = addColorbarToAxes(axes[0, 0].scatter(table["oc_grid_x"], table["oc_grid_y"], c=table["oc_grid_T"], s=5))
     cbar.set_label("T [arcsec$^2$]")
 
-    emax = np.quantile(np.abs(np.concatenate([table["e1"], table["e2"]])), 0.98)
+    emax = np.quantile(np.abs(np.concatenate([table["oc_grid_e1"], table["oc_grid_e2"]])), 0.98)
     cbar = addColorbarToAxes(
         axes[1, 0].scatter(
-            table["oc_field_x"], table["oc_field_y"], c=table["oc_e1"], vmin=-emax, vmax=emax, cmap="bwr", s=5
+            table["oc_grid_x"], table["oc_grid_y"], c=table["oc_grid_e1"], vmin=-emax, vmax=emax, cmap="bwr", s=5
         )
     )
     cbar.set_label("e1")
 
     cbar = addColorbarToAxes(
         axes[1, 1].scatter(
-            table["oc_field_x"], table["oc_field_y"], c=table["oc_e2"], vmin=-emax, vmax=emax, cmap="bwr", s=5
+            table["oc_grid_x"], table["oc_grid_y"], c=table["oc_grid_e2"], vmin=-emax, vmax=emax, cmap="bwr", s=5
         )
     )
     cbar.set_label("e2")
 
     Q = axes[0, 1].quiver(
-        table["oc_field_x"],
-        table["oc_field_y"],
-        table["e"] * np.cos(0.5 * np.arctan2(table["oc_e2"], table["oc_e1"])),
-        table["e"] * np.sin(0.5 * np.arctan2(table["oc_e2"], table["oc_e1"])),
+        table["oc_grid_x"],
+        table["oc_grid_y"],
+        table["oc_grid_e"] * np.cos(0.5 * np.arctan2(table["oc_grid_e2"], table["oc_grid_e1"])),
+        table["oc_grid_e"] * np.sin(0.5 * np.arctan2(table["oc_grid_e2"], table["oc_grid_e1"])),
         headlength=0,
         headaxislength=0,
         scale=quiverScale,
@@ -172,40 +172,40 @@ def makeOCSPlot(
     # Plot camera detector outlines - only plot labels on single-raft cameras;
     # otherwise it is overwhelming
     
-    if oneRaftOnly:
-        aaRot = table.meta["ocRot"]
-        for det in camera:
-            xs = []
-            ys = []
-            for corner in det.getCorners(FOCAL_PLANE):
-                xs.append(corner.x)
-                ys.append(corner.y)
-            xs.append(xs[0])
-            ys.append(ys[0])
-            xs = np.array(xs)
-            ys = np.array(ys)
-            rxs = aaRot[0, 0] * xs + aaRot[0, 1] * ys
-            rys = aaRot[1, 0] * xs + aaRot[1, 1] * ys
-            # Place detector label
-            x = min([c.x for c in det.getCorners(FOCAL_PLANE)])
-            y = max([c.y for c in det.getCorners(FOCAL_PLANE)])
-            rx = aaRot[0, 0] * x + aaRot[0, 1] * y
-            ry = aaRot[1, 0] * x + aaRot[1, 1] * y
-            rtp = table.meta["rotTelPos"]
-            for ax in axes.ravel():
-                ax.plot(rxs, rys, c="k", lw=1, alpha=0.3)
-                ax.text(
-                    rx,
-                    ry,
-                    det.getName(),
-                    rotation_mode="anchor",
-                    rotation=np.rad2deg(-rtp) - 90,
-                    horizontalalignment="left",
-                    verticalalignment="top",
-                    color="k",
-                    fontsize=6,
-                    zorder=20,
-                )
+    # if oneRaftOnly:
+    #     aaRot = table.meta["ocRot"]
+    #     for det in camera:
+    #         xs = []
+    #         ys = []
+    #         for corner in det.getCorners(FOCAL_PLANE):
+    #             xs.append(corner.x)
+    #             ys.append(corner.y)
+    #         xs.append(xs[0])
+    #         ys.append(ys[0])
+    #         xs = np.array(xs)
+    #         ys = np.array(ys)
+    #         rxs = aaRot[0, 0] * xs + aaRot[0, 1] * ys
+    #         rys = aaRot[1, 0] * xs + aaRot[1, 1] * ys
+    #         # Place detector label
+    #         x = min([c.x for c in det.getCorners(FOCAL_PLANE)])
+    #         y = max([c.y for c in det.getCorners(FOCAL_PLANE)])
+    #         rx = aaRot[0, 0] * x + aaRot[0, 1] * y
+    #         ry = aaRot[1, 0] * x + aaRot[1, 1] * y
+    #         rtp = table.meta["rotTelPos"]
+    #         for ax in axes.ravel():
+    #             ax.plot(rxs, rys, c="k", lw=1, alpha=0.3)
+    #             ax.text(
+    #                 rx,
+    #                 ry,
+    #                 det.getName(),
+    #                 rotation_mode="anchor",
+    #                 rotation=np.rad2deg(-rtp) - 90,
+    #                 horizontalalignment="left",
+    #                 verticalalignment="top",
+    #                 color="k",
+    #                 fontsize=6,
+    #                 zorder=20,
+    #             )
 
     fig.tight_layout()
     if saveAs:
@@ -279,10 +279,10 @@ def MakeGridMedianPSF(table, nx, ny, min_cell):
     """
     
 # Build the grid
-    min_x = min(table['oc_field_x'])
-    min_y = min(table['oc_field_y'])
-    max_x = max(table['oc_field_x'])
-    max_y = max(table['oc_field_y'])
+    min_x = min(table['oc_grid_x'])
+    min_y = min(table['oc_grid_y'])
+    max_x = max(table['oc_grid_x'])
+    max_y = max(table['oc_grid_y'])
 
     step_x = (max_x - min_x) / nx
     step_y = (max_y - min_y) / ny
@@ -307,16 +307,12 @@ def MakeGridMedianPSF(table, nx, ny, min_cell):
     for x, y in zip(xx_for_zip, yy_for_zip):
 
         # Search sources within each cell
-        ind_temp = (table['oc_field_x'] > (x - step_x/2.)) & (table['oc_field_x'] <= (x + step_x/2.)) & (table['oc_field_y'] > (y - step_y/2.)) & (table['oc_field_y'] <= (y + step_y/2.))
+        ind_temp = (table['oc_grid_x'] > (x - step_x/2.)) & (table['oc_grid_x'] <= (x + step_x/2.)) & (table['oc_grid_y'] > (y - step_y/2.)) & (table['oc_grid_y'] <= (y + step_y/2.))
         itemindex = np.where(ind_temp == True)
         n_stars_in_cell = len(itemindex[0])
-
-        # grid_id.append([iii]*n_stars_in_cell)
-        # ids = table['id'][itemindex]
-        # all_ids.append(ids)
         
-        oc_grid_x_median.append(np.median(table['oc_field_x'][itemindex]))
-        oc_grid_y_median.append(np.median(table['oc_field_y'][itemindex]))
+        oc_grid_x_median.append(np.median(table['oc_grid_x'][itemindex]))
+        oc_grid_y_median.append(np.median(table['oc_grid_y'][itemindex]))
         n_stars_in_cells.append(n_stars_in_cell)
 
         # assign median moments to the grid
@@ -340,21 +336,26 @@ def MakeGridMedianPSF(table, nx, ny, min_cell):
               
     table_grid["oc_grid_x"] = xx_for_zip
     table_grid["oc_grid_y"] = yy_for_zip
-              
+
+    # Median grid coordinates
     table_grid["oc_grid_x_median"] = oc_grid_x_median
     table_grid["oc_grid_y_median"] = oc_grid_y_median
 
     table_grid["n_stars_in_cells"] = n_stars_in_cells
     
+    # Median moments
     table_grid["oc_grid_Ixx"] = Ixx_oc_grid
     table_grid["oc_grid_Ixy"] = Ixy_oc_grid
     table_grid["oc_grid_Iyy"] = Iyy_oc_grid
               
+    # Ellipticities
     table_grid["oc_grid_T"] = table_grid["oc_grid_Ixx"] + table_grid["oc_grid_Iyy"]
     table_grid["oc_grid_e1"] = (table_grid["oc_grid_Ixx"] - table_grid["oc_grid_Iyy"]) / table_grid["oc_grid_T"]
     table_grid["oc_grid_e2"] = 2 * table_grid["oc_grid_Ixy"] / table_grid["oc_grid_T"]
     table_grid["oc_grid_e"] = np.hypot(table_grid["oc_grid_e1"], table_grid["oc_grid_e2"])
 
-    return table_grid
-
+    # Add metadata
+    table_grid.meta["ocRot"] = table.meta["ocRot"]
+    table_grid.meta["rotTelPos"] = table.meta["rotTelPos"]
     
+    return table_grid
