@@ -127,6 +127,12 @@ def addADC_to_Table(table, elevation_angle, filter, pressure=800, temperature=15
     table['aa_unc_e2'] = table['aa_e2']
     table['aa_unc_x'] = table['aa_x']
     table['aa_unc_y'] = table['aa_y']
+
+    # calculate the ellipticities with uncorrected moments
+    table["aa_unc_T"] = table["aa_Ixx"] + table["aa_unc_Iyy"]
+    table["aa_unc_e1"] = (table["aa_unc_Ixx"] - table["aa_unc_Iyy"]) / table["aa_unc_T"]
+    table["aa_unc_e2"] = 2 * table["aa_unc_Ixy"] / table["aa_unc_T"]
+    table["aa_unc_e"] = np.hypot(table["aa_unc_e1"], table["aa_unc_e2"])
     
     # Add the correction factor to the 'aa_Iyy' column in place
     table['aa_Iyy'] = table['aa_unc_Iyy'] - correction_factor
