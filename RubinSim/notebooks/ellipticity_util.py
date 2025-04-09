@@ -17,25 +17,131 @@ import numpy as np
 from astropy.io import ascii
 from astropy.table import Table
 
-# def calcFieldXY(self):
-#         """
-#         Calculate the X, Y field position of the centroid in degrees.
+# import astropy.units as u
+# from astropy.coordinates import AltAz, Angle, EarthLocation, SkyCoord
+# from astropy.time import Time
 
-#         Returns
-#         -------
-#         `float`
-#             Field x position in degrees.
-#         `float`
-#             Field y position in degrees.
-#         """
+# def pseudo_parallactic_angle(
+#     ra: float,
+#     dec: float,
+#     mjd: float,
+#     lon: float = -70.7494,
+#     lat: float = -30.2444,
+#     height: float = 2650.0,
+#     pressure: float = 750.0,
+#     temperature: float = 11.5,
+#     relative_humidity: float = 0.4,
+#     obswl: float = 1.0,
+# ):
+#     """Compute the pseudo parallactic angle.
 
-#         cam = self.getCamera()
-#         det = cam.get(self.detector_name)
+#     The (traditional) parallactic angle is the angle zenith - coord - NCP
+#     where NCP is the true-of-date north celestial pole.  This function instead
+#     computes zenith - coord - NCP_ICRF where NCP_ICRF is the north celestial
+#     pole in the International Celestial Reference Frame.
 
-#         field_x, field_y = det.transform(self.centroid_position, PIXELS, FIELD_ANGLE)
+#     Parameters
+#     ----------
+#     ra, dec : float
+#         ICRF coordinates in degrees.
+#     mjd : float
+#         Modified Julian Date.
+#     latitude, longitude : float
+#         Geodetic coordinates of observer in degrees.
+#     height : float
+#         Height of observer above reference ellipsoid in meters.
+#     pressure : float
+#         Atmospheric pressure in millibars.
+#     temperature : float
+#         Atmospheric temperature in degrees Celsius.
+#     relative_humidity : float
+#     obswl : float
+#         Observation wavelength in microns.
 
-#         return np.degrees(field_x), np.degrees(field_y)
+#     Returns
+#     -------
+#     ppa : float
+#         The pseudo parallactic angle in degrees.
+#     """
+#     obstime = Time(mjd, format="mjd", scale="tai")
+#     location = EarthLocation.from_geodetic(
+#         lon=lon * u.deg,
+#         lat=lat * u.deg,
+#         height=height * u.m,
+#         ellipsoid="WGS84",  # For concreteness
+#     )
 
+#     coord_kwargs = dict(
+#         obstime=obstime,
+#         location=location,
+#         pressure=pressure * u.mbar,
+#         temperature=temperature * u.deg_C,
+#         relative_humidity=relative_humidity,
+#         obswl=obswl * u.micron,
+#     )
+
+#     coord = SkyCoord(ra * u.deg, dec * u.deg, **coord_kwargs)
+
+#     towards_zenith = SkyCoord(
+#         alt=coord.altaz.alt + 10 * u.arcsec,
+#         az=coord.altaz.az,
+#         frame=AltAz,
+#         **coord_kwargs
+#     )
+
+#     towards_north = SkyCoord(
+#         ra=coord.icrs.ra, dec=coord.icrs.dec + 10 * u.arcsec, **coord_kwargs
+#     )
+
+#     ppa = coord.position_angle(towards_zenith) - coord.position_angle(towards_north)
+#     return ppa.wrap_at(180 * u.deg).deg
+    
+# def rtp_to_rsp(rotTelPos: float, ra: float, dec: float, mjd: float, **kwargs: dict):
+#     """Convert RotTelPos -> RotSkyPos.
+
+#     Parameters
+#     ----------
+#     rotTelPos : float
+#         Camera rotation angle in degrees.
+#     ra, dec : float
+#         ICRF coordinates in degrees.
+#     mjd : float
+#         Modified Julian Date.
+#     **kwargs : dict
+#         Other keyword arguments to pass to pseudo_parallactic_angle.  Defaults
+#         are generally appropriate for Rubin Observatory.
+
+#     Returns
+#     -------
+#     rsp : float
+#         RotSkyPos in degrees.
+#     """
+#     q = pseudo_parallactic_angle(ra, dec, mjd, **kwargs)
+#     return Angle((270 - rotTelPos + q)*u.deg).wrap_at(180 * u.deg).deg
+
+# def rsp_to_rtp(rotSkyPos: float, ra: float, dec: float, mjd: float, **kwargs: dict):
+#     """Convert RotTelPos -> RotSkyPos.
+
+#     Parameters
+#     ----------
+#     rotSkyPos : float
+#         Sky rotation angle in degrees.
+#     ra, dec : float
+#         ICRF coordinates in degrees.
+#     mjd : float
+#         Modified Julian Date.
+#     **kwargs : dict
+#         Other keyword arguments to pass to pseudo_parallactic_angle.  Defaults
+#         are generally appropriate for Rubin Observatory.
+
+#     Returns
+#     -------
+#     rsp : float
+#         RotSkyPos in degrees.
+#     """
+#     q = pseudo_parallactic_angle(ra, dec, mjd, **kwargs)
+#     return Angle((270 - rotSkyPos + q)*u.deg).wrap_at(180 * u.deg)
+    
 def addFieldCoords_to_Table( table, camera ):
     """Extend the given table with additional columns.
 
@@ -87,6 +193,14 @@ def makeOCSPlot(
     camera: Camera,
     maxPoints: int = 1000,
     saveAs: str = "",
+    autoscale = True, 
+    scalemin_e = 0.,
+    scalemax_e = 0.45,
+    scalemin_e1 = -0.2,
+    scalemax_e1 = 0.2,
+    scalemin_e2 = -0.2,
+    scalemax_e2 = 0.2,
+    scale_quiver = 0.2
 ):
     """Plot the PSFs on the focal plane, rotated to az/el which is taken to be OCS.
 
@@ -132,35 +246,68 @@ def makeOCSPlot(
 
     table = randomRows(table, maxPoints)
 
-    cbar = addColorbarToAxes(axes[0, 0].scatter(table["oc_field_x"], table["oc_field_y"], c=table["T"], s=5))
-    cbar.set_label("T [arcsec$^2$]")
-
-    emax = np.quantile(np.abs(np.concatenate([table["oc_e1"], table["oc_e2"]])), 0.98)
-    cbar = addColorbarToAxes(
-        axes[1, 0].scatter(
-            table["oc_field_x"], table["oc_field_y"], c=table["oc_e1"], vmin=-emax, vmax=emax, cmap="bwr", s=5
+    if autoscale:
+        cbar = addColorbarToAxes(axes[0, 0].scatter(table["oc_field_x"], table["oc_field_y"], c=table["T"], s=5))
+        cbar.set_label("T [arcsec$^2$]")
+    
+        emax = np.quantile(np.abs(np.concatenate([table["oc_e1"], table["oc_e2"]])), 0.98)
+        cbar = addColorbarToAxes(
+            axes[1, 0].scatter(
+                table["oc_field_x"], table["oc_field_y"], c=table["oc_e1"], vmin=-emax, vmax=emax, cmap="bwr", s=5
+            )
         )
-    )
-    cbar.set_label("e1")
-
-    cbar = addColorbarToAxes(
-        axes[1, 1].scatter(
-            table["oc_field_x"], table["oc_field_y"], c=table["oc_e2"], vmin=-emax, vmax=emax, cmap="bwr", s=5
+        cbar.set_label("e1")
+    
+        cbar = addColorbarToAxes(
+            axes[1, 1].scatter(
+                table["oc_field_x"], table["oc_field_y"], c=table["oc_e2"], vmin=-emax, vmax=emax, cmap="bwr", s=5
+            )
         )
-    )
-    cbar.set_label("e2")
+        cbar.set_label("e2")
+    
+        Q = axes[0, 1].quiver(
+            table["oc_field_x"],
+            table["oc_field_y"],
+            table["e"] * np.cos(0.5 * np.arctan2(table["oc_e2"], table["oc_e1"])),
+            table["e"] * np.sin(0.5 * np.arctan2(table["oc_e2"], table["oc_e1"])),
+            headlength=0,
+            headaxislength=0,
+            scale=quiverScale,
+            pivot="middle",
+        )
+        axes[0, 1].quiverkey(Q, X=0.08, Y=0.95, U=0.2, label="0.2", labelpos="S")
 
-    Q = axes[0, 1].quiver(
-        table["oc_field_x"],
-        table["oc_field_y"],
-        table["e"] * np.cos(0.5 * np.arctan2(table["oc_e2"], table["oc_e1"])),
-        table["e"] * np.sin(0.5 * np.arctan2(table["oc_e2"], table["oc_e1"])),
-        headlength=0,
-        headaxislength=0,
-        scale=quiverScale,
-        pivot="middle",
-    )
-    axes[0, 1].quiverkey(Q, X=0.08, Y=0.95, U=0.2, label="0.2", labelpos="S")
+    else:
+        cbar = addColorbarToAxes(axes[0, 0].scatter(table["oc_field_x"], table["oc_field_y"], c=table["T"], 
+                                                    s=5, vmin=scalemin_e, vmax=scalemax_e))
+        cbar.set_label("T [arcsec$^2$]")
+    
+        emax = np.quantile(np.abs(np.concatenate([table["oc_e1"], table["oc_e2"]])), 0.98)
+        cbar = addColorbarToAxes(
+            axes[1, 0].scatter(
+                table["oc_field_x"], table["oc_field_y"], c=table["oc_e1"], vmin=scalemin_e1, vmax=scalemax_e1, cmap="bwr", s=5
+            )
+        )
+        cbar.set_label("e1")
+    
+        cbar = addColorbarToAxes(
+            axes[1, 1].scatter(
+                table["oc_field_x"], table["oc_field_y"], c=table["oc_e2"], vmin=scalemin_e2, vmax=scalemax_e2, cmap="bwr", s=5
+            )
+        )
+        cbar.set_label("e2")
+    
+        Q = axes[0, 1].quiver(
+            table["oc_field_x"],
+            table["oc_field_y"],
+            table["e"] * np.cos(0.5 * np.arctan2(table["oc_e2"], table["oc_e1"])),
+            table["e"] * np.sin(0.5 * np.arctan2(table["oc_e2"], table["oc_e1"])),
+            headlength=0,
+            headaxislength=0,
+            scale=scale_quiver,
+            pivot="middle",
+        )
+        axes[0, 1].quiverkey(Q, X=0.08, Y=0.95, U=0.2, label="0.2", labelpos="S")
 
     for ax in axes.ravel():
         ax.set_xlabel("hx [deg]")
@@ -385,6 +532,82 @@ def addOpticalCoords_to_Table( table ):
 
     return table
 
+def makeTableFromCalexps(calexps, sourcess, psfs, elevation_angle, visitInfo):
+
+    for calexp, source, psf in zip(calexps, sourcess, psfs):
+    
+        e_star, ex_star_dvcs, ey_star_dvcs, ex_rot_star_dvcs, ey_rot_star_dvcs, i_xx_star, i_yy_star, i_xy_star, \
+            aaIxx_star, aaIxy_star, aaIyy_star, e1, e2, xx_star_dvcs, yy_star_dvcs, theta_star_dvcs, \
+            xx_rot_star_dvcs, yy_rot_star_dvcs, ra_star_dvcs, dec_star_dvcs, fwhm, size, fluxes_star = \
+            calculate_ellipticity_on_xy(calexp, sources, psf, 1, n_grid=0, 
+            rotation_sticks=2, do_flip=False, do_ad_correction=True, 
+            zenith_angle=90.-elevation_angle)
+
+    table = Table()
+
+    table["oc_field_x"] = xx_rot_star_dvcs
+    table["oc_field_y"] = yy_rot_star_dvcs
+
+    return table
+
+# def makeTableFromCalexps(icSrcs: dict[int, SourceCatalog], visitInfo: VisitInfo) -> Table:
+    # """Extract the shapes from the source catalogs into an astropy table.
+
+    # The shapes of the PSF candidates are extracted from the source catalogs and
+    # transformed into the required coordinate systems for plotting either focal
+    # plane coordinates, az/el coordinates, or equatorial coordinates.
+
+    # Parameters
+    # ----------
+    # icSrcs : `dict` [`int`, `lsst.afw.table.SourceCatalog`]
+    #     A dictionary of source catalogs, keyed by the detector numbers.
+    # visitInfo : `lsst.afw.image.VisitInfo`
+    #     The visit information for a representative visit.
+
+    # Returns
+    # -------
+    # table : `astropy.table.Table`
+    #     The table containing the data from the source catalogs.
+    # """
+    # tables = []
+
+    # for detectorNum, icSrc in icSrcs.items():
+    #     icSrc = icSrc.asAstropy()
+    #     icSrc = icSrc[icSrc["calib_psf_candidate"]]
+    #     icSrc["detector"] = detectorNum
+    #     tables.append(icSrc)
+
+    # table = vstack(tables)
+    # # Add shape columns
+    # table["Ixx"] = table["slot_Shape_xx"] * (0.2) ** 2
+    # table["Ixy"] = table["slot_Shape_xy"] * (0.2) ** 2
+    # table["Iyy"] = table["slot_Shape_yy"] * (0.2) ** 2
+    # table["T"] = table["Ixx"] + table["Iyy"]
+    # table["e1"] = (table["Ixx"] - table["Iyy"]) / table["T"]
+    # table["e2"] = 2 * table["Ixy"] / table["T"]
+    # table["e"] = np.hypot(table["e1"], table["e2"])
+    # table["x"] = table["base_FPPosition_x"]
+    # table["y"] = table["base_FPPosition_y"]
+
+    # table.meta["rotTelPos"] = (
+    #     visitInfo.boresightParAngle - visitInfo.boresightRotAngle - (np.pi / 2 * radians)
+    # ).asRadians()
+    # table.meta["rotSkyPos"] = visitInfo.boresightRotAngle.asRadians()
+
+    # rtp = table.meta["rotTelPos"]
+    # srtp, crtp = np.sin(rtp), np.cos(rtp)
+    # aaRot = np.array([[crtp, srtp], [-srtp, crtp]]) @ np.array([[0, 1], [1, 0]]) @ np.array([[-1, 0], [0, 1]])
+    # table = extendTable(table, aaRot, "aa")
+    # table.meta["aaRot"] = aaRot
+
+    # rsp = table.meta["rotSkyPos"]
+    # srsp, crsp = np.sin(rsp), np.cos(rsp)
+    # nwRot = np.array([[crsp, -srsp], [srsp, crsp]])
+    # table = extendTable(table, nwRot, "nw")
+    # table.meta["nwRot"] = nwRot
+
+    # return table
+
 def MakeGridMedianPSF(table, nx, ny, min_cell):
     """Builds a table, in OC coordinates, where the PSF moments are stored
     on a grid (both regular and with weighted coordinates).
@@ -488,3 +711,236 @@ def MakeGridMedianPSF(table, nx, ny, min_cell):
     table_grid.meta["rotTelPos"] = table.meta["rotTelPos"]
     
     return table_grid
+
+# #XXX
+# def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_positions, 
+#                                 rotation_sticks=1, do_flip=True, do_ad_correction=True, 
+#                                 zenith_angle=0., pressure=727, temperature=6.85, n_grid=200, fileout=''):
+
+#     #rotation_sticks= 1: rotazione di entità +rottelpos_radians degli sticks
+#     #rotation_sticks= 0: nessuna rotazione degli sticks
+#     #rotation_sticks=-1: rotazione di entità -rottelpos_radians degli sticks
+#     #rotation_sticks=2: rotazione alla Josh con Quadrupole
+
+#     det = calexp.getDetector()
+#     wcs = calexp.getWcs()
+#     visit_id = calexp.info.getVisitInfo().getId()
+
+#     passband = calexp.getInfo().getFilter().bandLabel
+    
+#     rotskypos = (calexp.info.getVisitInfo().getBoresightRotAngle()).asDegrees()
+#     rottelpos = rsp_to_rtp(rotskypos, \
+#             (calexp.info.getVisitInfo().getBoresightRaDec())[0].asDegrees(), \
+#             (calexp.info.getVisitInfo().getBoresightRaDec())[1].asDegrees(), \
+#             calexp.info.getVisitInfo().getDate().toAstropy()).deg
+#     rottelpos_radians = np.radians(rottelpos)
+
+#     if rotation_sticks>=1:
+#         rottelpos_radians_for_ellipticitysticks = rottelpos_radians
+#     elif rotation_sticks==0:
+#         rottelpos_radians_for_ellipticitysticks = 0.
+#     elif rotation_sticks==-1:
+#         rottelpos_radians_for_ellipticitysticks = -rottelpos_radians
+
+#     crtp = np.cos(rottelpos_radians)
+#     srtp = np.sin(rottelpos_radians)
+
+#     # aa sta per Alt-Azimuth, trasformazione da codice di Josh:
+#     # https://github.com/lsst-sitcom/summit_extras/blob/main/python/lsst/summit/extras/plotting/psfPlotting.py
+#     aaRot = np.array([[crtp, srtp], [-srtp, crtp]]) @ np.array([[0, 1], [1, 0]]) @ np.array([[-1, 0], [0, 1]])
+#     ocRot = np.array([[1, 0], [0, -1]]) @ aaRot # Rotazione Ricardo
+#     transform_for_ell = LinearTransform(aaRot)
+
+#     # ------------Get the points on grid/star positions (in CCS)------------
+#     if regular_grid_or_star_positions == 0:
+#         # Per la visualizzazione della PSF su griglia regolare
+#         grid_separation_x = calexp.getDimensions()[0] / n_grid
+#         grid_separation_y = calexp.getDimensions()[1] / n_grid
+#         x_array = np.arange(n_grid)*grid_separation_x + grid_separation_x/2.
+#         y_array = np.arange(n_grid)*grid_separation_y + grid_separation_y/2.
+#         xx, yy = np.meshgrid(x_array, y_array)
+#         xx_for_zip = xx.flatten()
+#         yy_for_zip = yy.flatten()
+#         xxshape = n_grid*n_grid
+
+#     elif regular_grid_or_star_positions == 1:
+#         # Per la visualizzazione della PSF sulle coordinate delle stelle
+#         xx = [l.getCentroid()[0] for l in sources]
+#         yy = [l.getCentroid()[1] for l in sources]
+#         xx_for_zip = xx
+#         yy_for_zip = yy
+#         xxshape = len(xx)
+#         fluxes = [l.getPsfInstFlux() for l in sources]
+
+#         # xx_fpposition = sources['base_FPPosition_x']
+#         # yy_fpposition = sources['base_FPPosition_y']
+
+#     elif regular_grid_or_star_positions == 2:
+#         xx_for_zip = [2000.]
+#         yy_for_zip = [2000.]
+#         xxshape = len(xx_for_zip)
+
+#     # ------------convert CCS into DVCS and extract moments------------
+#     size = []
+#     i_xx = []
+#     i_yy = []
+#     i_xy = []
+#     points = []
+
+#     xx_star_dvcs = []
+#     yy_star_dvcs = []
+#     xx_rot_star_dvcs = []
+#     yy_rot_star_dvcs = []
+#     xx_ocrot_star = []
+#     yy_ocrot_star = []
+#     ra_star_dvcs = []
+#     dec_star_dvcs = []
+    
+#     for x, y in zip(xx_for_zip, yy_for_zip):
+#         point = Point2D(x, y)        
+#         coo = wcs.pixelToSky(x, y)
+#         cam_x, cam_y = pixel_to_camera_angle(point[0], point[1], det)
+#         x0, y0 = np.asarray(cam_x[0]), np.asarray(cam_y[0])
+#         # Rotazioni mie
+#         # xx_rot = x0*crtp - y0*srtp
+#         # yy_rot = x0*srtp + y0*crtp
+#         # Rotazioni Josh
+#         xx_rot = aaRot[0, 0] * x0 + aaRot[0, 1] * y0
+#         yy_rot = aaRot[1, 0] * x0 + aaRot[1, 1] * y0
+#         xx_ocrot = ocRot[0, 0] * x0 + ocRot[0, 1] * y0
+#         yy_ocrot = ocRot[1, 0] * x0 + ocRot[1, 1] * y0
+
+#         shape = psf.computeShape(point)
+#         size.append(shape.getTraceRadius())
+#         i_xx.append(shape.getIxx())
+#         i_yy.append(shape.getIyy())
+#         i_xy.append(shape.getIxy())
+#         points.append(point)
+
+#         if do_flip:
+#             xx_star_dvcs.append(cam_y[0])
+#             yy_star_dvcs.append(cam_x[0])
+#             xx_rot_star_dvcs.append(yy_rot)
+#             yy_rot_star_dvcs.append(xx_rot)
+#         else:
+#             xx_star_dvcs.append(cam_x[0])
+#             yy_star_dvcs.append(cam_y[0])
+#             xx_rot_star_dvcs.append(xx_rot)
+#             yy_rot_star_dvcs.append(yy_rot)
+#             xx_ocrot_star.append(xx_ocrot)
+#             yy_ocrot_star.append(yy_ocrot)
+
+#         ra_star_dvcs.append(coo[0].asDegrees())
+#         dec_star_dvcs.append(coo[1].asDegrees())
+
+#     size = np.reshape(size, xxshape)
+#     i_xx = np.reshape(i_xx, xxshape)
+#     i_yy = np.reshape(i_yy, xxshape)
+#     i_xy = np.reshape(i_xy, xxshape)
+
+#     table_moments = {'Ixx': i_xx, 'Iyy': i_yy, 'Ixy': i_xy}
+
+#     # ------------Transform moments into ellipticities------------
+#     theta = np.arctan2(2. * i_xy, i_xx - i_yy) / 2.
+
+#     e1 = (i_xx - i_yy) / (i_xx + i_yy)
+#     e2 = (2. * i_xy) / (i_xx + i_yy)
+    
+#     theta_alternate = np.arctan2(e2, e1) / 2.
+#     assert np.allclose(theta, theta_alternate)
+
+#     e_star = np.sqrt(e1**2 + e2**2)
+#     ex = e_star * np.cos(theta)
+#     ey = e_star * np.sin(theta)
+
+#     if do_flip:
+#     # --- Con inversione XY degli stick--- OBSOLETE!!!!
+#         # Rotazioni mie
+#         ey_star_dvcs = ex
+#         ex_star_dvcs = ey
+#         crtp_e = np.cos(rottelpos_radians_for_ellipticitysticks)
+#         srtp_e = np.sin(rottelpos_radians_for_ellipticitysticks)
+#         ey_rot_star_dvcs = ex*crtp_e - ey*srtp_e
+#         ex_rot_star_dvcs = ex*srtp_e + ey*crtp_e
+#     else:
+#     # --- Senza inversione XY degli stick--- DEFAULT!!!!
+#         ey_star_dvcs = ey
+#         ex_star_dvcs = ex
+
+#         # Rotazioni mie
+#         # ex_rot_star_dvcs = ex*crtp_e - ey*srtp_e
+#         # ey_rot_star_dvcs = ex*srtp_e + ey*crtp_e
+
+#         if rotation_sticks==2:
+#             # Rotazioni Josh (Quadrupole)
+#             rot_shapes = []
+#             for i_xx1, i_yy1, i_xy1 in zip(i_xx, i_yy, i_xy):
+#                 shape = Quadrupole(i_xx1, i_yy1, i_xy1)
+#                 rot_shapes.append(shape.transform(transform_for_ell))
+                
+#             aaIxx = np.asarray([sh.getIxx() for sh in rot_shapes])
+#             aaIyy = np.asarray([sh.getIyy() for sh in rot_shapes])
+#             aaIxy = np.asarray([sh.getIxy() for sh in rot_shapes])
+
+#             if do_ad_correction:
+#                 aaIyy = aaIyy - compute_atm_dispersion(zenith_angle, passband, pression=pressure, temperature=temperature)
+            
+#             e1_rot_star_dvcs = (aaIxx - aaIyy) / (aaIxx + aaIyy)
+#             e2_rot_star_dvcs = 2 * aaIxy / (aaIxx + aaIyy)    
+            
+#             theta_josh = np.arctan2(e2_rot_star_dvcs, e1_rot_star_dvcs) / 2.
+#             e_star = np.sqrt(e1_rot_star_dvcs**2 + e2_rot_star_dvcs**2)
+#             ex_rot_star_dvcs = e_star * np.cos(theta_josh)
+#             ey_rot_star_dvcs = e_star * np.sin(theta_josh)
+#         else:
+#             # Rotazioni con aaRot, tutte sbagliate???
+#             ex_rot_star_dvcs = aaRot[0, 0] * ex + aaRot[0, 1] * ey
+#             ey_rot_star_dvcs = aaRot[1, 0] * ex + aaRot[1, 1] * ey
+    
+#     theta_star_dvcs = np.arctan2(ey, ex)
+
+#     fwhm = []
+#     # FWHM
+#     for point in points:
+#         sigma = psf.computeShape(point).getDeterminantRadius()
+#         pixelScale = calexp.getWcs().getPixelScale().asArcseconds()
+#         fwhm_temp = sigma * pixelScale * 2.355
+#         fwhm.append(fwhm_temp)
+    
+#     if (regular_grid_or_star_positions == 0) | (regular_grid_or_star_positions == 2):
+#         if fileout != '':
+#             df = pd.DataFrame(data={'x_pixel_ccs': xx_for_zip, 'y_pixel_ccs': yy_for_zip, 'e_star': e_star, 
+#                                'ex_star_dvcs': ex_star_dvcs, 'ey_star_dvcs': ey_star_dvcs, 
+#                                 'ex_rot_star_dvcs': ex_rot_star_dvcs, 'ey_rot_star_dvcs': ey_rot_star_dvcs, 
+#                                 'i_xx': i_xx, 'i_yy': i_yy, 'i_xx': i_xy,  
+#                                 'e1': e1, 'e2': e2, 'theta_star_dvcs': theta_star_dvcs,
+#                                 'xx_star_dvcs': xx_star_dvcs, 'yy_star_dvcs': yy_star_dvcs, 
+#                                 'xx_rot_star_dvcs': xx_rot_star_dvcs, 'yy_rot_star_dvcs': yy_rot_star_dvcs, 
+#                                 'ra_star_dvcs': ra_star_dvcs, 'dec_star_dvcs': dec_star_dvcs,
+#                                'theta_alternate':theta_alternate, 'fwhm': fwhm, 'detector': [det.getId()] * len(xx_for_zip), 
+#                                'visit_id':  [visit_id] * len(xx_for_zip)})
+#             df.to_csv(fileout, index=None)
+#             # df['theta_rot_star_dvcs'] = np.degrees(np.arctan2(ex_rot_star_dvcs, ey_rot_star_dvcs))
+#             # df[['xx_rot_star_dvcs', 'yy_rot_star_dvcs', 'e_star', 'theta_rot_star_dvcs']].to_csv(fileout+'_for_ricardo', index=None)
+    
+#         return e_star, ex_star_dvcs, ey_star_dvcs, ex_rot_star_dvcs, ey_rot_star_dvcs, i_xx, i_yy, i_xy, \
+#             aaIxx, aaIxy, aaIyy, e1, e2, xx_star_dvcs, yy_star_dvcs, theta_star_dvcs, \
+#             xx_rot_star_dvcs, yy_rot_star_dvcs, ra_star_dvcs, dec_star_dvcs, fwhm, size
+
+#     elif regular_grid_or_star_positions == 1:
+#         if fileout != '':
+#             df = pd.DataFrame(data={'x_pixel_ccs': xx_for_zip, 'y_pixel_ccs': yy_for_zip, 'e_star': e_star, 
+#                                'ex_star_dvcs': ex_star_dvcs, 'ey_star_dvcs': ey_star_dvcs, 
+#                                 'ex_rot_star_dvcs': ex_rot_star_dvcs, 'ey_rot_star_dvcs': ey_rot_star_dvcs, 
+#                                 'i_xx': i_xx, 'i_yy': i_yy, 'i_xx': i_xy,  
+#                                 'e1': e1, 'e2': e2, 'theta_star_dvcs': theta_star_dvcs,
+#                                 'xx_star_dvcs': xx_star_dvcs, 'yy_star_dvcs': yy_star_dvcs, 
+#                                 'xx_rot_star_dvcs': xx_rot_star_dvcs, 'yy_rot_star_dvcs': yy_rot_star_dvcs, 
+#                                 'ra_star_dvcs': ra_star_dvcs, 'dec_star_dvcs': dec_star_dvcs,
+#                                'theta_alternate':theta_alternate, 'fwhm': fwhm, 'fluxes': fluxes, 'detector': [det.getId()] * len(xx_for_zip), 
+#                                'visit_id':  [visit_id] * len(xx_for_zip)})
+#             df.to_csv(fileout, index=None)
+    
+#         return e_star, ex_star_dvcs, ey_star_dvcs, ex_rot_star_dvcs, ey_rot_star_dvcs, i_xx, i_yy, i_xy, \
+#             aaIxx, aaIxy, aaIyy, e1, e2, xx_star_dvcs, yy_star_dvcs, theta_star_dvcs, \
+#             xx_rot_star_dvcs, yy_rot_star_dvcs, ra_star_dvcs, dec_star_dvcs, fwhm, size, fluxes
