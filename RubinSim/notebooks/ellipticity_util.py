@@ -200,7 +200,8 @@ def makeOCSPlot(
     scalemax_e1 = 0.2,
     scalemin_e2 = -0.2,
     scalemax_e2 = 0.2,
-    scale_quiver = 0.2
+    scale_quiver = 0.2,
+    size_quiver = 0.1
 ):
     """Plot the PSFs on the focal plane, rotated to az/el which is taken to be OCS.
 
@@ -275,7 +276,7 @@ def makeOCSPlot(
             scale=quiverScale,
             pivot="middle",
         )
-        axes[0, 1].quiverkey(Q, X=0.08, Y=0.95, U=0.2, label="0.2", labelpos="S")
+        axes[0, 1].quiverkey(Q, X=0.08, Y=0.95, U=size_quiver, label="{:4.2f}".format(size_quiver), labelpos="S")
 
     else:
         cbar = addColorbarToAxes(axes[0, 0].scatter(table["oc_field_x"], table["oc_field_y"], c=table["T"], 
@@ -307,7 +308,7 @@ def makeOCSPlot(
             scale=scale_quiver,
             pivot="middle",
         )
-        axes[0, 1].quiverkey(Q, X=0.08, Y=0.95, U=0.2, label="0.2", labelpos="S")
+        axes[0, 1].quiverkey(Q, X=0.08, Y=0.95, U=size_quiver, label="{:4.2f}".format(size_quiver), labelpos="S")
 
     for ax in axes.ravel():
         ax.set_xlabel("hx [deg]")
@@ -356,6 +357,7 @@ def makeOCSPlot(
     fig.tight_layout()
     if saveAs:
         fig.savefig(saveAs)
+        
 def makeOCSPlot_bk(
     fig: plt.Figure,
     axes: np.ndarray[plt.Axes],
