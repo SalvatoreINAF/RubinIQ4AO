@@ -714,6 +714,89 @@ def MakeGridMedianPSF(table, nx, ny, min_cell):
     
     return table_grid
 
+def statistics_on_moments(table, minflux=-9.):
+    """Calculates mean, median and standard deviation of moments.
+
+    Parameters
+    ----------
+    table : `astropy.table.Table`
+        The input table containing the original shapes.
+    minflux : `float`
+        The flux (in base_CircularApertureFlux_6_0_instFlux) 
+        below which the stars should be discarded for the calculation of statistics
+        
+    Returns
+    -------
+    statistics : `astropy.table.Table`
+        A table with the statistics on moments.
+    """
+    
+    # Selezione solo su flussi maggiori di una certa quantità
+    ind_good = table['base_CircularApertureFlux_6_0_instFlux'] >= minflux
+
+    table = table[ind_good]
+    
+    oc_ixx_mean = np.mean(table['oc_Ixx'].value)
+    oc_ixx_median = np.median(table['oc_Ixx'].value)
+    oc_ixx_std = np.std(table['oc_Ixx'].value)
+    
+    oc_iyy_mean = np.mean(table['oc_Iyy'].value)
+    oc_iyy_median = np.median(table['oc_Iyy'].value)
+    oc_iyy_std = np.std(table['oc_Iyy'].value)
+    
+    oc_ixy_mean = np.mean(table['oc_Ixy'].value)
+    oc_ixy_median = np.median(table['oc_Ixy'].value)
+    oc_ixy_std = np.std(table['oc_Ixy'].value)
+    
+    oc_e1_mean = np.mean(table['oc_e1'].value)
+    oc_e1_median = np.median(table['oc_e1'].value)
+    oc_e1_std = np.std(table['oc_e1'].value)
+    
+    oc_e2_mean = np.mean(table['oc_e2'].value)
+    oc_e2_median = np.median(table['oc_e2'].value)
+    oc_e2_std = np.std(table['oc_e2'].value)
+    
+    aa_e_mean = np.mean(table['aa_e'].value)
+    aa_e_median = np.median(table['aa_e'].value)
+    aa_e_std = np.std(table['aa_e'].value)
+    
+    e_mean = np.mean(table['e'].value)
+    e_median = np.median(table['e'].value)
+    e_std = np.std(table['e'].value)
+    
+    T_mean = np.mean(table['T'].value)
+    T_median = np.median(table['T'].value)
+    T_std = np.std(table['T'].value)
+
+    statistics = Table()
+    statistics['oc_ixx_mean'] = [oc_ixx_mean]
+    statistics['oc_iyy_mean'] = [oc_iyy_mean]
+    statistics['oc_ixy_mean'] = [oc_ixy_mean]
+    statistics['oc_e1_mean'] = [oc_e1_mean]
+    statistics['oc_e2_mean'] = [oc_e2_mean]
+    statistics['aa_e_mean'] = [aa_e_mean]
+    statistics['e_mean'] = [e_mean]
+    statistics['T_mean'] = [T_mean]
+    statistics['oc_ixx_median'] = [oc_ixx_median]
+    statistics['oc_iyy_median'] = [oc_iyy_median]
+    statistics['oc_ixy_median'] = [oc_ixy_median]
+    statistics['oc_e1_median'] = [oc_e1_median]
+    statistics['oc_e2_median'] = [oc_e2_median]
+    statistics['aa_e_median'] = [aa_e_median]
+    statistics['e_median'] = [e_median]
+    statistics['T_median'] = [T_median]
+    statistics['oc_ixx_std'] = [oc_ixx_std]
+    statistics['oc_iyy_std'] = [oc_iyy_std]
+    statistics['oc_ixy_std'] = [oc_ixy_std]
+    statistics['oc_e1_std'] = [oc_e1_std]
+    statistics['oc_e2_std'] = [oc_e2_std]
+    statistics['aa_e_std'] = [aa_e_std]
+    statistics['e_std'] = [e_std]
+    statistics['T_std'] = [T_std]
+    
+    return statistics
+
+
 # #XXX
 # def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_positions, 
 #                                 rotation_sticks=1, do_flip=True, do_ad_correction=True, 
