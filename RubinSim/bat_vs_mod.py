@@ -22,13 +22,22 @@ from util import psf_fft_coeffs, plot_one_psf
 rng = np.random.default_rng(seed=777)
     
 def get_random_dof( amps, all = False ):
-    
+    n_amps = len( amps )
+    ikeep = ( amps != 0 )
+    if( ikeep.sum() == 0):
+        print( 'All dof amplitudes are zero. Nothing to randomize')
+        print('get_random_dof')
+        sys.exit(1)
+
     if( all ):
-        dof = ( rng.random(10) * 2 - 1 ) * amps     # from -1 to 1
+        dof = ( rng.random( n_amps ) * 2 - 1 ) * amps     # from -1 to 1
     else:
-        dof = np.zeros( 10 )
+        dof = np.zeros( n_amps )
         one = rng.random() * 2 - 1                  # from -1 to 1
-        i_rnd = rng.integers(0, 10 )
+        while True:
+            i_rnd = rng.integers(0, n_amps, endpoint=False )
+            if( ikeep[ i_rnd ] ):   #leave until I get a non-zero dof
+                break
         dof[ i_rnd ] = one * amps[ i_rnd ]
         
     return dof
@@ -61,7 +70,7 @@ def norm( array ):
     # euclidian norm taking into account array's mask
     return np.sqrt( (array*array).sum() )
     
-def run_simulations( lm, fb, mal, nsim ):
+def run_simulations( lm, fb, max_amplitude, nsim, all = True ):
     # run nsim random simulations, batoid vs model WF.
     # return a dictionary with the results for later stats and plots
     # to save results
@@ -76,7 +85,7 @@ def run_simulations( lm, fb, mal, nsim ):
     
     for i in range( nsim ):
         # generate random zz (at first one at a time, later 10 random dof )
-        dof = get_random_dof( mal._max_amplitude, all = True )
+        dof = get_random_dof( max_amplitude, all = all )
         dof_list.append( dof )
         
         # generate random hx,hy
@@ -89,7 +98,7 @@ def run_simulations( lm, fb, mal, nsim ):
         
         # get coeffs with batoid
         fb.wl_index = iwl
-        fb.dof = np.pad( dof, (0,40), 'empty' )
+        fb.dof = dof
         fb.hx, fb.hy = hx, hy
         bat_coeff = fb.zernike_coeffs()
         coeffs_bat.append( bat_coeff[0] )
@@ -150,7 +159,7 @@ def plot_dofs( lista, maxamp ):
     
     for i in range( maxamp.size ):
         dof_index = rnd_i + i
-        ax.plot( dof_index, array[:,i], '.', markersize=0.1  )
+        ax.plot( dof_index, array[:,i], '.' )
         
         
     ax.set_ylabel("normalized misalignment")
@@ -187,23 +196,37 @@ def plot_diff_vs_dof( diff, lista, maxamp ):
     
     # ax.set_aspect('equal', 'box')
     # plt.xlim(0,0.004)
-    
-    
+
     
 
 if __name__=='__main__':
     nsim = 10000
     
+    use_all_dofs = True
+    dofs_range = [0,50]     #only simulate this range of dofs
+    amp_divisor = 1 # so that the PSF fits inside a 10x10 box pixel.
+    
     # fname = 'znk_batoid_coeffs_wl_2_jmax_22_dbg.hdf5'
     # fname = 'znk_batoid_coeffs_wl_6_jmax_22.hdf5'
     # fname = 'znk_batoid_coeffs_wl_2_jmax_37_dbg.hdf5'
-    fname = 'znk_batoid_coeffs_wl_6_jmax_37.hdf5'
-    
-    outpickle = 'res_bat_mod_'+fname.replace('znk_batoid_coeffs_','').replace('.hdf5','')+'.pkl'
+    # fname = 'znk_batoid_coeffs_wl_6_jmax_37.hdf5'
+    # fname = 'data/test_models/znk_batoid_coeffs_wl_2_jmax_37_dbg.hdf5_VE82IV'
+    # fname = 'data/test_models/znk_batoid_coeffs_wl_6_jmax_37.hdf5_7BY08R'
+    fname = 'data/test_models/znk_batoid_coeffs_wl_6_jmax_37_ComCam.hdf5_Z08IOR'
+    path = pathlib.Path( fname )
+    outpickle = path.parent / path.stem.replace('znk_batoid_coeffs_','res_bat_mod_').replace('.hdf5','.pkl')
+    outpickle = outpickle.with_suffix('.pkl')
     print( outpickle )
     
     mal = fromBatoid.MisAlignment()
-    print( mal._max_amplitude )
+    max_amplitude = mal._max_amplitude.copy() / amp_divisor
+    if( not use_all_dofs ):
+        ikeep=np.arange(dofs_range[0], dofs_range[1],dtype=int)
+        temp = np.zeros( len( max_amplitude ) )
+        temp[ ikeep ] = max_amplitude[ ikeep ]
+        max_amplitude = temp
+    
+    print( max_amplitude )
 
     if( pathlib.Path( outpickle ).is_file() ):
         res = pickle.load(open(outpickle, "rb"))
@@ -216,10 +239,15 @@ if __name__=='__main__':
             debug = True
         else:
             debug = False
+        if( 'ComCam' in fname ):
+            comcam = True
+        else:
+            comcam = False
         
-        fb = fromBatoid.FromBatoid(jmax=lm.batoid_cubes[0].nznkpupil, debug=debug)
+        fb = fromBatoid.FromBatoid(jmax=lm.batoid_cubes[0].nznkpupil, 
+                                   debug=debug, comcam=comcam)
         
-        res = run_simulations( lm, fb, mal, nsim )
+        res = run_simulations( lm, fb, max_amplitude, nsim, all=True )
         
     
         
@@ -232,17 +260,25 @@ if __name__=='__main__':
     lsstModel.plot_WF( res['bat'][ibad], res['mod'][ibad], residual=False, mode=2 )
     
     # plot worst case PSF
-    psf_coeffs_ric = psf_fft_coeffs(  res['mod'][ibad], 360 )
+    psf_coeffs_ric = psf_fft_coeffs(  res['bat'][ibad], 360 )
     plot_one_psf( psf_coeffs_ric, 'batoid')     # PSF with coeffs
     psf_coeffs_ric = psf_fft_coeffs(  res['mod'][ibad], 360 )
     plot_one_psf( psf_coeffs_ric, 'model')     # PSF with coeffs
     
+    ibad = res['norm_ratios'].argmin()
+    print('worst index and value:', ibad, res['norm_ratios'][ibad] )
+    lsstModel.plot_WF( res['bat'][ibad], res['mod'][ibad], residual=False, mode=2 )
     
-    
-    
+    # plot worst case PSF
+    psf_coeffs_ric = psf_fft_coeffs(  res['bat'][ibad], 360 )
+    plot_one_psf( psf_coeffs_ric, 'batoid')     # PSF with coeffs
+    psf_coeffs_ric = psf_fft_coeffs(  res['mod'][ibad], 360 )
+    plot_one_psf( psf_coeffs_ric, 'model')     # PSF with coeffs
+
+
+
     plot_histogram( res['norm_ratios'] )
 
     plot_coords( res['hx_arr'], res['hy_arr'] )
 
     plot_dofs( res['dof_list'], mal._max_amplitude )
-    

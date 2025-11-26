@@ -10,21 +10,86 @@ from util import fit_zernike_coefficients, rayPSF
 import batoid
 from batoid_rubin import builder
 import numpy as np
+from multiprocessing import Pool
+
+class Engine(object):
+    # an class to be iterated in Pool with inputs pars
+    #  to multiprocess psf and ellipticity.
+    def __init__(self, hx, hy, telescope, wl, psf_type, seeing ):
+        self.hx = hx
+        self.hy = hy
+        self._telescope = telescope
+        self.wl = wl
+        self.psf_type = psf_type
+        self.seeing = seeing
+
+    def __call__(self, cnt ):
+        # find the psf and then ellipticity one field point at a time
+        x, y = self.hx[cnt], self.hy[cnt]
+        if( self.psf_type == 'ray' ):
+            psf = rayPSF( self._telescope,
+                          np.deg2rad(x), np.deg2rad(y),
+                          self.wl, nphot=10000,
+                          seeing=self.seeing )
+        elif( self.psf_type == 'fft' ):
+            psf = batoid.analysis.fftPSF(self._telescope,
+                                         np.deg2rad(x), np.deg2rad(y),
+                                         self.wl, nx=360,
+                                   pad_factor=4, reference='mean')
+
+        psfnorm = psf.array / psf.array.max()
+        X = psf.coords[:,:,1]
+        Y = psf.coords[:,:,0]
+        suma = psfnorm.sum()
+    #centroid
+        x_cen = ( psfnorm * X ).sum() / suma
+        y_cen = ( psfnorm * Y ).sum() / suma
+    #moments 2nd
+        mu_xx = ((X - x_cen)**2 * psfnorm ).sum() / suma    #m^2
+        mu_yy = ((Y - y_cen)**2 * psfnorm ).sum() / suma    #m^2
+        mu_xy = ((X - x_cen) * ( Y - y_cen ) * psfnorm ).sum() / suma #m^2
+
+    #ellipticity
+        p = mu_xx + mu_yy                  # m^2
+        e1 = ( mu_xx - mu_yy ) / p         #
+        e2 = 2 * mu_xy / p                 #
+        q = np.sqrt( e1**2 + e2**2 ) * p   # m^2
+        sigma_l = np.sqrt( ( p + q ) / 2 ) # m
+        sigma_s = np.sqrt( ( p - q ) / 2 ) # m
+        ellipticity_adimensional = 1 - sigma_s/sigma_l
+        alpha = np.rad2deg( np.arctan2( e2, e1 ) / 2 )    # deg
+
+        pix_per_m = 1 / 10.0e-6    # 1pix = 10um
+
+        tup = ( sigma_l * pix_per_m, sigma_s * pix_per_m,
+               ellipticity_adimensional, alpha,
+               x_cen * pix_per_m, y_cen * pix_per_m,
+               mu_xx * pix_per_m**2, mu_yy * pix_per_m**2, mu_xy * pix_per_m**2,
+               p * pix_per_m**2, q * pix_per_m**2, e1, e2)
+
+        return tup
 
 class FromBatoid:
     
-    def __init__( self, wl_index = 0, jmax = 22, debug=False ):
+    def __init__( self, wl_index = 0, jmax = 22, debug=False, comcam=False ):
         # default telescope, etc
-        self.jmax = jmax                  # zernike pupil terms
-        self.field_radius = 1.708       # degrees
-        if( debug ):
-            print("*** dbg: only 2 wavelengths")
-            self.wl_array = np.array( [0.384, 0.481]) * 1e-6
-            self.wave_files = ["LSST_u.yaml", "LSST_g.yaml"]
+        if( comcam ):
+            self.field_radius = 0.43       # degrees
+            self.wave_files = ["ComCam_u.yaml", "ComCam_g.yaml", "ComCam_r.yaml",
+                               "ComCam_i.yaml", "ComCam_z.yaml", "ComCam_y.yaml"]
         else:
-            self.wl_array =np.array([0.384,0.481,0.622,0.770,0.895,0.994])*1e-6
+            self.field_radius = 1.708     # degrees
             self.wave_files = ["LSST_u.yaml", "LSST_g.yaml", "LSST_r.yaml",
                                "LSST_i.yaml", "LSST_z.yaml", "LSST_y.yaml"]
+
+        self.jmax = jmax                  # zernike pupil terms
+        self.wl_array =np.array([0.384,0.481,0.622,0.770,0.895,0.994])*1e-6
+
+        if( debug ):
+            print("*** dbg: only 2 wavelengths")
+            self.wl_array = self.wl_array[0:2]
+            self.wave_files = self.wave_files[0:2]
+
         self.n_wl = len( self.wl_array )
         self._dof = np.zeros( 50 )               #nominal case
         self.hx = np.array([0.0])                 # in degrees
@@ -201,6 +266,13 @@ class FromBatoid:
         pa = []
         xc = []
         yc = []
+        mu_xx_list = []     #test
+        mu_yy_list = []     #test
+        mu_xy_list = []     #test
+        p_list = []
+        q_list = []
+        e1_list = []
+        e2_list = []
         cnt = 0
         for psf in self.psf:
             psfnorm = psf.array / psf.array.max()
@@ -211,33 +283,175 @@ class FromBatoid:
             x_cen = ( psfnorm * X ).sum() / suma
             y_cen = ( psfnorm * Y ).sum() / suma
         #moments 2nd
-            mu_xx = ((X - x_cen)**2 * psfnorm ).sum() / suma
-            mu_yy = ((Y - y_cen)**2 * psfnorm ).sum() / suma
-            mu_xy = ((X - x_cen) * ( Y - y_cen ) * psfnorm ).sum() / suma
+            mu_xx = ((X - x_cen)**2 * psfnorm ).sum() / suma    #m^2
+            mu_yy = ((Y - y_cen)**2 * psfnorm ).sum() / suma    #m^2
+            mu_xy = ((X - x_cen) * ( Y - y_cen ) * psfnorm ).sum() / suma #m^2
+
         #ellipticity
-            p = mu_xx + mu_yy
-            q = np.sqrt( (mu_xx - mu_yy)**2 + 4 * mu_xy**2 )
-            sigma_l = np.sqrt( ( p + q ) / 2 )
-            sigma_s = np.sqrt( ( p - q ) / 2 )
+            p = mu_xx + mu_yy                  # m^2
+            e1 = ( mu_xx - mu_yy ) / p         #
+            e2 = 2 * mu_xy / p                 #
+            q = np.sqrt( e1**2 + e2**2 ) * p   # m^2
+            sigma_l = np.sqrt( ( p + q ) / 2 ) # m
+            sigma_s = np.sqrt( ( p - q ) / 2 ) # m
             ellipticity_adimensional = 1 - sigma_s/sigma_l
-            alpha = np.rad2deg( np.arctan2( 2 * mu_xy, mu_xx - mu_yy ) / 2 )
+            alpha = np.rad2deg( np.arctan2( e2, e1 ) / 2 )    # deg
             
             # print( q * np.cos( alpha ), q * np.sin( alpha ), mu_xx, mu_yy, mu_xy )
-            print("%.3d %5.2f %10.2f" %( cnt, ellipticity_adimensional, alpha ) )
+            #print("%.3d %5.2f %10.2f" %( cnt, ellipticity_adimensional, alpha ) )
+
+            pix_per_m = 1 / 10.0e-6    # 1pix = 10um
             cnt+=1
             
-            sl.append( sigma_l)
-            ss.append( sigma_s )
+            sl.append( sigma_l * pix_per_m )
+            ss.append( sigma_s * pix_per_m )
             el.append( ellipticity_adimensional )
             pa.append( alpha )          # degrees
-            xc.append( x_cen )
-            yc.append( y_cen )
+            xc.append( x_cen * pix_per_m )
+            yc.append( y_cen * pix_per_m )
+            mu_xx_list.append( mu_xx * pix_per_m**2 )
+            mu_yy_list.append( mu_yy * pix_per_m**2 )
+            mu_xy_list.append( mu_xy * pix_per_m**2 )
+            p_list.append( p * pix_per_m**2 )
+            q_list.append( q * pix_per_m**2 )
+            e1_list.append( e1 )
+            e2_list.append( e2 )
             
         self.ellipticity = {'sl': sl, 'ss': ss, 'el': el, 
-                         'pa': pa, 'xc': xc, 'yc': yc}
+                         'pa': pa, 'xc': xc, 'yc': yc, 
+                         'muyy':mu_yy_list,
+                         'muxy':mu_xy_list,
+                         'muxx':mu_xx_list,
+                         'p':p_list,
+                         'q':q_list,
+                         'e1': e1_list,
+                         'e2': e2_list
+                         }
+        return
+
+    def psf_ellip_compute( self, psf_type = 'ray', seeing=0.5 ):
+        # find the psf and then ellipticity one field point at a time
+        if( psf_type == 'ray' or psf_type == 'fft' ):
+            self.psf_type = psf_type
+        else:
+            print('*** invalid psf_type. Using current valid:', self.psf_type )
             
-        return 
+        sl = []
+        ss = []
+        el = []
+        pa = []
+        xc = []
+        yc = []
+        mu_xx_list = []     #test
+        mu_yy_list = []     #test
+        mu_xy_list = []     #test
+        p_list = []
+        q_list = []
+        e1_list = []
+        e2_list = []
+        for x, y in zip( self.hx, self.hy ):
+            if( self.psf_type == 'ray' ):
+                psf = rayPSF( self._telescope,
+                              np.deg2rad(x), np.deg2rad(y),
+                              self.wl, nphot=10000,
+                              seeing=seeing )
+            elif( self.psf_type == 'fft' ):
+                psf = batoid.analysis.fftPSF(self._telescope,
+                                             np.deg2rad(x), np.deg2rad(y),
+                                             self.wl, nx=360,
+                                       pad_factor=4, reference='mean')
+
+            psfnorm = psf.array / psf.array.max()
+            X = psf.coords[:,:,1]
+            Y = psf.coords[:,:,0]
+            suma = psfnorm.sum()
+        #centroid
+            x_cen = ( psfnorm * X ).sum() / suma
+            y_cen = ( psfnorm * Y ).sum() / suma
+        #moments 2nd
+            mu_xx = ((X - x_cen)**2 * psfnorm ).sum() / suma    #m^2
+            mu_yy = ((Y - y_cen)**2 * psfnorm ).sum() / suma    #m^2
+            mu_xy = ((X - x_cen) * ( Y - y_cen ) * psfnorm ).sum() / suma #m^2
+
+        #ellipticity
+            p = mu_xx + mu_yy                  # m^2
+            e1 = ( mu_xx - mu_yy ) / p         #
+            e2 = 2 * mu_xy / p                 #
+            q = np.sqrt( e1**2 + e2**2 ) * p   # m^2
+            sigma_l = np.sqrt( ( p + q ) / 2 ) # m
+            sigma_s = np.sqrt( ( p - q ) / 2 ) # m
+            ellipticity_adimensional = 1 - sigma_s/sigma_l
+            alpha = np.rad2deg( np.arctan2( e2, e1 ) / 2 )    # deg
+
+            pix_per_m = 1 / 10.0e-6    # 1pix = 10um
+
+            sl.append( sigma_l * pix_per_m )
+            ss.append( sigma_s * pix_per_m )
+            el.append( ellipticity_adimensional )
+            pa.append( alpha )          # degrees
+            xc.append( x_cen * pix_per_m )
+            yc.append( y_cen * pix_per_m )
+            mu_xx_list.append( mu_xx * pix_per_m**2 )
+            mu_yy_list.append( mu_yy * pix_per_m**2 )
+            mu_xy_list.append( mu_xy * pix_per_m**2 )
+            p_list.append( p * pix_per_m**2 )
+            q_list.append( q * pix_per_m**2 )
+            e1_list.append( e1 )
+            e2_list.append( e2 )
             
+        self.ellipticity = {'sl': sl, 'ss': ss, 'el': el,
+                         'pa': pa, 'xc': xc, 'yc': yc,
+                         'muyy':mu_yy_list,
+                         'muxy':mu_xy_list,
+                         'muxx':mu_xx_list,
+                         'p':p_list,
+                         'q':q_list,
+                         'e1': e1_list,
+                         'e2': e2_list
+                         }
+
+        return
+
+    def psf_ellip_compute_multiproc( self, psf_type = 'ray', seeing=0.5, nprocess=6 ):
+        # find the psf and then ellipticity one field point at a time
+        if( psf_type == 'ray' or psf_type == 'fft' ):
+            self.psf_type = psf_type
+        else:
+            print('*** invalid psf_type. Using current valid:', self.psf_type )
+
+        try:
+            pool = Pool(processes=nprocess) # on 8 processors
+            eng = Engine( self.hx, self.hy, self._telescope, self.wl, psf_type,
+                         seeing )
+            ellip_list = pool.map(eng, range(len(self.hx)))
+        finally: # To make sure processes are closed in the end, even if errors happen
+            pool.close()
+            pool.join()
+
+        sl = [ tup[0] for tup in ellip_list ]
+        ss = [ tup[1] for tup in ellip_list ]
+        el = [ tup[2] for tup in ellip_list ]
+        pa = [ tup[3] for tup in ellip_list ]
+        xc = [ tup[4] for tup in ellip_list ]
+        yc = [ tup[5] for tup in ellip_list ]
+        mu_xx_list = [ tup[6] for tup in ellip_list ]
+        mu_yy_list = [ tup[7] for tup in ellip_list ]
+        mu_xy_list = [ tup[8] for tup in ellip_list ]
+        p_list = [ tup[9] for tup in ellip_list ]
+        q_list = [ tup[10] for tup in ellip_list ]
+        e1_list = [ tup[11] for tup in ellip_list ]
+        e2_list = [ tup[12] for tup in ellip_list ]
+
+        self.ellipticity = {'sl': sl, 'ss': ss, 'el': el,
+                         'pa': pa, 'xc': xc, 'yc': yc,
+                         'muyy':mu_yy_list,
+                         'muxy':mu_xy_list,
+                         'muxx':mu_xx_list,
+                         'p':p_list,
+                         'q':q_list,
+                         'e1': e1_list,
+                         'e2': e2_list
+                         }
             
     def get_list_nominal_znk_coeffs( self ):
         
@@ -258,7 +472,7 @@ class FromBatoid:
             cube = []                       # collect ndist x nznk x nfield 
             cnt = 1
             for dof in dof_list:
-                print( dof[0:10], cnt,'/', len(dof_list), i+1,'/', self.n_wl )
+                # print( dof[0:10], cnt,'/', len(dof_list), i+1,'/', self.n_wl )
                 self.dof = dof
                 cube.append( self.zernike_coeffs() )
                 cnt+=1
@@ -276,7 +490,62 @@ class FromBatoid:
 
 class MisAlignment():
     def __init__( self ):
-        self._max_amplitude = np.array([25.0, 1000.0, 1000.0, 25.0, 25.0, 25.0, 4000.0, 4000.0, 25.0, 25.0])
+        # self._max_amplitude = np.array([25.0, 1000.0, 1000.0, 25.0, 25.0, 25.0, 4000.0, 4000.0, 25.0, 25.0])
+        self._max_amplitude = np.array([100.0,  #00
+                                       2250.0,  #01
+                                       2250.0,  #02
+                                       70.0,    #03
+                                       70.0,    #04
+                                       100.0,   #05
+                                       7550.0,  #06
+                                       7550.0,  #07
+                                       90.0,    #08
+                                       90.0,    #09
+
+                                       1.5,    #10
+                                       1.5,    #11
+                                       0.5,    #12
+                                       1.2,    #13
+                                       1.2,    #14
+                                       0.7,    #15
+                                       0.7,    #16
+                                       1.0,    #17
+                                       1.0,    #18
+                                       1.0,    #19
+
+                                       1.0,    #20
+                                       1.1,    #21
+                                       0.7,    #22
+                                       0.7,    #23
+                                       0.9,    #24
+                                       0.9,    #25
+                                       0.7,    #26
+                                       0.7,    #27
+                                       0.6,    #28
+                                       0.7,    #29
+
+                                       2.3,    #30
+                                       2.3,    #31
+                                       1.7,    #32
+                                       1.6,    #33
+                                       1.1,    #34
+                                       1.4,    #35
+                                       1.4,    #36
+                                       1.3,    #37
+                                       1.3,    #38
+                                       1.0,    #39
+
+                                       1.0,    #40
+                                       1.1,    #41
+                                       1.1,    #42
+                                       1.0,    #43
+                                       0.9,    #44
+                                       0.9,    #45
+                                       0.9,    #46
+                                       0.6,    #47
+                                       0.6,    #48
+                                       0.6     #49
+                                       ])
         self.n_dof = len( self._max_amplitude )
         self.nperturbations = 8     # even number
         self.list = self.get_dof_list()
