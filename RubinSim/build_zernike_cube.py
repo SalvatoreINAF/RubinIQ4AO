@@ -13,12 +13,21 @@ from pathlib import Path
 from util import zernike_optimal_sampling
 from fromBatoid import FromBatoid, MisAlignment
 import argparse
+import string
+import random
 
-def save_to_hd5( list_nominals, list_cube, fb, mal, debug=False ):
+def save_to_hd5( list_nominals, list_cube, fb, mal, debug=False, comcam=False ):
+    rnd_chars = ''.join(random.choices(string.ascii_uppercase+string.digits,k=6))
     if( debug ):
-        fname = "znk_batoid_coeffs_wl_%d_jmax_%d_dbg.hdf5" %(fb.n_wl, fb.jmax)
+        if( comcam ):
+            fname = "znk_batoid_coeffs_wl_%d_jmax_%d_dbg_ComCam.hdf5_%s" %(fb.n_wl, fb.jmax, rnd_chars)
+        else:
+            fname = "znk_batoid_coeffs_wl_%d_jmax_%d_dbg.hdf5_%s" %(fb.n_wl, fb.jmax, rnd_chars)
     else:
-        fname = "znk_batoid_coeffs_wl_%d_jmax_%d.hdf5" %(fb.n_wl, fb.jmax)
+        if( comcam ):
+            fname = "znk_batoid_coeffs_wl_%d_jmax_%d_ComCam.hdf5_%s" %(fb.n_wl, fb.jmax, rnd_chars)
+        else:
+            fname = "znk_batoid_coeffs_wl_%d_jmax_%d.hdf5_%s" %(fb.n_wl, fb.jmax, rnd_chars)
         
     mypath = Path( fname )
     if( mypath.is_file() ):
@@ -55,8 +64,10 @@ def get_pars():
     """
 
     parser.add_argument('--jmax', help='jmax number of zernike coefficients', type=int, default=37, choices=[11,22,37] )
+    parser.add_argument('--step', help='Use only N/step points. arr[::step]', type=int, default=1 )
     parser.add_argument("-d", "--debug", help="2 wavelengths only and a reduced number of field points",
                     action="store_true")
+    parser.add_argument("--comcam", help="set camera to ComCam.", action="store_true")
     
     args = parser.parse_args()
     
@@ -64,26 +75,34 @@ def get_pars():
         debug = True
     else:
         debug = False
+    if args.comcam:
+        withComCam = True
+    else:
+        withComCam = False
 
-    jmax = args.jmax 
+    jmax = args.jmax
+    step = args.step
 
-    return jmax, debug
+    return jmax, debug, step, withComCam
 
 
 if __name__ == "__main__":
     
-    jmax, debug = get_pars()
+    jmax, debug, step, comcam = get_pars()
     
     print( 'jmax=', jmax )
     
-    fBat = FromBatoid(jmax=jmax, debug=debug)
+    fBat = FromBatoid(jmax=jmax, debug=debug, comcam=comcam)
     
     mal = MisAlignment()
         
     # H
-    hx, hy, _, _ = zernike_optimal_sampling( fBat.jmax, debug=debug )
+    hx, hy, _, _ = zernike_optimal_sampling( fBat.jmax, step=step )
     
     hx_deg, hy_deg = hx * fBat.field_radius, hy * fBat.field_radius
+    rad = np.hypot( hx_deg, hy_deg )
+    print( 'working on %d field points. Max radius %.2f deg' %(len( hx ), rad.max()))
+
     fBat.hx, fBat.hy = hx_deg, hy_deg
     
     tic=timeit.default_timer()
@@ -98,6 +117,6 @@ if __name__ == "__main__":
     tac = timeit.default_timer()
     print( "Actual time = %d" %(tac -tic ) )
     
-    save_to_hd5( list_nominals, list_cube, fBat, mal, debug=debug )
+    save_to_hd5( list_nominals, list_cube, fBat, mal, debug=debug, comcam=comcam )
 
     
