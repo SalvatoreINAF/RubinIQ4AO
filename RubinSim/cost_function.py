@@ -230,7 +230,8 @@ def setup_model( fname, hx, hy, dof0 ):
         print( '*** Error, unknown fname kind' )
         sys.exit(1)
             
-    lm = lsstModel.lsstModel( batoid_cube_file=fname, n_fldznk=n_fldznk )
+    # lm = lsstModel.lsstModel( batoid_cube_file=fname, n_fldznk=n_fldznk )
+    lm = lsstModel.lsstModel( model_file=fname, n_fldznk=n_fldznk )
     lm.wl_index = 2 #red
 
     # coords =  np.vstack( (hx, hy) ).T
@@ -530,7 +531,8 @@ def read_ellipticity_map( imsim_file, dofs0=None ):
 
         # fname = 'znk_batoid_coeffs_wl_2_jmax_22_dbg.hdf5'
         # fname = 'znk_batoid_coeffs_wl_6_jmax_22.hdf5'
-        fname = 'data/test_models/znk_batoid_coeffs_wl_6_jmax_37.hdf5_7BY08R'
+        # fname = 'data/test_models/znk_batoid_coeffs_wl_6_jmax_37.hdf5_7BY08R'
+        fname = 'data/test_models/znk_batoid_coeffs_wl_6_jmax_37.json' #new json format relative to 7BY08R
         # fname = 'znk_batoid_coeffs_wl_6_jmax_11.hdf5'
         # fname = 'znk_batoid_coeffs_wl_2_jmax_37_dbg.hdf5'
         # fname = 'znk_batoid_coeffs_wl_6_jmax_37.hdf5'
@@ -712,7 +714,8 @@ def minimize_map( ntry, free_pars_index, dofs_fake, imsim_file, noplot=False, no
 
     # fname = 'znk_batoid_coeffs_wl_2_jmax_22_dbg.hdf5'
     # fname = 'znk_batoid_coeffs_wl_6_jmax_22.hdf5'
-    fname = 'data/test_models/znk_batoid_coeffs_wl_6_jmax_37.hdf5_7BY08R'
+    # fname = 'data/test_models/znk_batoid_coeffs_wl_6_jmax_37.hdf5_7BY08R'
+    fname = 'data/test_models/znk_batoid_coeffs_wl_6_jmax_37.json' #new json format relative to 7BY08R
     # fname = 'znk_batoid_coeffs_wl_6_jmax_11.hdf5'
     # fname = 'znk_batoid_coeffs_wl_2_jmax_37_dbg.hdf5'
     # fname = 'znk_batoid_coeffs_wl_6_jmax_37.hdf5'

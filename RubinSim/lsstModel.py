@@ -18,6 +18,7 @@ import sys
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 from multiprocessing import Pool
+from pathlib import Path
 
 import mpi4py.MPI as MPI
 
@@ -105,7 +106,7 @@ class lsstModel:
     def __init__( self, n_fldznk = 22, 
                  batoid_cube_file =None, 
                  model_file=None ):
-    
+
         self.wl_index = 0
         self.n_fldznk = n_fldznk
         self.batoid_cubes = None
@@ -120,9 +121,9 @@ class lsstModel:
         self.a1 = None                  # polynomial fit a1*x + a2*x^2
         self.a2 = None
         self.wl_array =np.array([0.384,0.481,0.622,0.770,0.895,0.994])*1e-6
-        
+
         self.dof = np.zeros(50)
-    
+
         if( batoid_cube_file ): #fit input batoid coefficients
             self.batoid_cubes = read_h5_coeffs( batoid_cube_file )
             self.n_wl = len( self.batoid_cubes )
@@ -130,21 +131,76 @@ class lsstModel:
             # when creating model we can't use set_hxhy yet because we need nom_proj
             self._hx = self.batoid_cubes[0].coords[0,:]
             self._hy = self.batoid_cubes[0].coords[1,:]
-            
+
             self.znk_basis = galsim.zernike.zernikeBasis( self.n_fldznk, 
                                             self._hx/self.field_radius, #norm 1
                                             self._hy/self.field_radius)
             znk_inv = np.linalg.pinv( self.znk_basis )
-            
+
             self.nom_proj = [ np.matmul( znk_inv.T, self.batoid_cubes[iwl].nominal ) for iwl in range(self.n_wl ) ]
             self.nominal = [ np.matmul( self.znk_basis.T, nom_proj ) for nom_proj in self.nom_proj ]
-            
+
             self.c_dblznk = get_dbl_znk_coeff( self.batoid_cubes, znk_inv )#(znkpup,znkdbl,zita,wl)
-            
+
             self.a1, self.a2 = fit_misaligned_coeffs( self.batoid_cubes, self.c_dblznk )
-        elif( model_file ):     # read a1, a2, nom_proj 
-            pass                #  sets n_wl, n_fldznk and znk_basis, hx, hy to default
             
+            # save the fitted model parameters to a jason file
+            p = Path(batoid_cube_file)
+            parent = p.parent
+            stem = p.stem  # filename without extension
+            outfile = str(parent / f"{stem}.json")
+            self.save_model_jason( outfile )
+        elif( model_file ):     # read a1, a2, nom_proj from json file
+            print('Reading JSON model from', model_file )
+            self.read_model_jason( model_file )
+
+    def save_model_jason( self, filename ):
+        import json
+        model_dict = {}
+        model_dict['n_wl'] = self.n_wl
+        model_dict['field_radius'] = self.field_radius
+        model_dict['a1'] = self.a1.tolist()
+        model_dict['a2'] = self.a2.tolist()
+        model_dict['nom_proj'] = [ nom_proj.tolist() for nom_proj in self.nom_proj ]
+
+
+        #if file exists we create a backup of old file and overwrite
+        p = Path( filename )
+        if( p.exists() ):
+            backup_name = str( p.parent / f"{p.stem}_backup.json" )
+            p.rename( backup_name )
+            print( f"Existing model file renamed to {backup_name}" )
+
+        with open( filename, 'w' ) as f:
+            json.dump( model_dict, f, indent=4 )
+
+        print( 'Model saved to', filename )
+
+        return
+
+    def read_model_jason( self, filename ):
+        import json
+        with open( filename, 'r' ) as f:
+            model_dict = json.load( f )
+
+        self.n_wl = model_dict['n_wl']
+        self.field_radius = model_dict['field_radius']
+        self.a1 = np.array( model_dict['a1'] )
+        self.a2 = np.array( model_dict['a2'] )
+        self.nom_proj = [ np.array( nom_proj ) for nom_proj in model_dict['nom_proj'] ]
+
+
+
+        # self._hx = np.array( [0.0] )    # default single field point on axis
+        # self._hy = np.array( [0.0] )
+
+        # self.znk_basis = galsim.zernike.zernikeBasis( self.n_fldznk,
+        #                                 self._hx/self.field_radius, #norm 1
+        #                                 self._hy/self.field_radius)
+        # self.nominal = [ np.matmul( self.znk_basis.T, nom_proj ) for nom_proj in self.nom_proj ]
+
+        return
+
     def zernike_coeffs( self, piston_tilt = None ):
         """
         

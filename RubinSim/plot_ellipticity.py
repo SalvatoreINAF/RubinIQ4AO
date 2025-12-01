@@ -496,9 +496,10 @@ if( __name__ == '__main__'):
         # fname = 'znk_batoid_coeffs_wl_6_jmax_22.hdf5'
         # fname = 'znk_batoid_coeffs_wl_2_jmax_37_dbg.hdf5'
         # fname = 'znk_batoid_coeffs_wl_6_jmax_37.hdf5'
-        fname = 'data/test_models/znk_batoid_coeffs_wl_6_jmax_37.hdf5_7BY08R'
+        # fname = 'data/test_models/znk_batoid_coeffs_wl_6_jmax_37.hdf5_7BY08R'
+        fname = 'data/test_models/znk_batoid_coeffs_wl_6_jmax_37.json'
         #fname = 'data/test_models/znk_batoid_coeffs_wl_6_jmax_37_ComCam.hdf5_Z08IOR'
-        lm = lsstModel.lsstModel( batoid_cube_file=fname, n_fldznk=22)
+        lm = lsstModel.lsstModel( model_file=fname, n_fldznk=22)
         lm.wl_index = 2
         lm.dof = dof
         
