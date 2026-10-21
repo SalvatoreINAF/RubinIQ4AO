@@ -16,132 +16,8 @@ from lsst.summit.extras.plotting.psfPlotting import randomRows, addColorbarToAxe
 import numpy as np
 from astropy.io import ascii
 from astropy.table import Table
+from treegp import meanify
 
-# import astropy.units as u
-# from astropy.coordinates import AltAz, Angle, EarthLocation, SkyCoord
-# from astropy.time import Time
-
-# def pseudo_parallactic_angle(
-#     ra: float,
-#     dec: float,
-#     mjd: float,
-#     lon: float = -70.7494,
-#     lat: float = -30.2444,
-#     height: float = 2650.0,
-#     pressure: float = 750.0,
-#     temperature: float = 11.5,
-#     relative_humidity: float = 0.4,
-#     obswl: float = 1.0,
-# ):
-#     """Compute the pseudo parallactic angle.
-
-#     The (traditional) parallactic angle is the angle zenith - coord - NCP
-#     where NCP is the true-of-date north celestial pole.  This function instead
-#     computes zenith - coord - NCP_ICRF where NCP_ICRF is the north celestial
-#     pole in the International Celestial Reference Frame.
-
-#     Parameters
-#     ----------
-#     ra, dec : float
-#         ICRF coordinates in degrees.
-#     mjd : float
-#         Modified Julian Date.
-#     latitude, longitude : float
-#         Geodetic coordinates of observer in degrees.
-#     height : float
-#         Height of observer above reference ellipsoid in meters.
-#     pressure : float
-#         Atmospheric pressure in millibars.
-#     temperature : float
-#         Atmospheric temperature in degrees Celsius.
-#     relative_humidity : float
-#     obswl : float
-#         Observation wavelength in microns.
-
-#     Returns
-#     -------
-#     ppa : float
-#         The pseudo parallactic angle in degrees.
-#     """
-#     obstime = Time(mjd, format="mjd", scale="tai")
-#     location = EarthLocation.from_geodetic(
-#         lon=lon * u.deg,
-#         lat=lat * u.deg,
-#         height=height * u.m,
-#         ellipsoid="WGS84",  # For concreteness
-#     )
-
-#     coord_kwargs = dict(
-#         obstime=obstime,
-#         location=location,
-#         pressure=pressure * u.mbar,
-#         temperature=temperature * u.deg_C,
-#         relative_humidity=relative_humidity,
-#         obswl=obswl * u.micron,
-#     )
-
-#     coord = SkyCoord(ra * u.deg, dec * u.deg, **coord_kwargs)
-
-#     towards_zenith = SkyCoord(
-#         alt=coord.altaz.alt + 10 * u.arcsec,
-#         az=coord.altaz.az,
-#         frame=AltAz,
-#         **coord_kwargs
-#     )
-
-#     towards_north = SkyCoord(
-#         ra=coord.icrs.ra, dec=coord.icrs.dec + 10 * u.arcsec, **coord_kwargs
-#     )
-
-#     ppa = coord.position_angle(towards_zenith) - coord.position_angle(towards_north)
-#     return ppa.wrap_at(180 * u.deg).deg
-    
-# def rtp_to_rsp(rotTelPos: float, ra: float, dec: float, mjd: float, **kwargs: dict):
-#     """Convert RotTelPos -> RotSkyPos.
-
-#     Parameters
-#     ----------
-#     rotTelPos : float
-#         Camera rotation angle in degrees.
-#     ra, dec : float
-#         ICRF coordinates in degrees.
-#     mjd : float
-#         Modified Julian Date.
-#     **kwargs : dict
-#         Other keyword arguments to pass to pseudo_parallactic_angle.  Defaults
-#         are generally appropriate for Rubin Observatory.
-
-#     Returns
-#     -------
-#     rsp : float
-#         RotSkyPos in degrees.
-#     """
-#     q = pseudo_parallactic_angle(ra, dec, mjd, **kwargs)
-#     return Angle((270 - rotTelPos + q)*u.deg).wrap_at(180 * u.deg).deg
-
-# def rsp_to_rtp(rotSkyPos: float, ra: float, dec: float, mjd: float, **kwargs: dict):
-#     """Convert RotTelPos -> RotSkyPos.
-
-#     Parameters
-#     ----------
-#     rotSkyPos : float
-#         Sky rotation angle in degrees.
-#     ra, dec : float
-#         ICRF coordinates in degrees.
-#     mjd : float
-#         Modified Julian Date.
-#     **kwargs : dict
-#         Other keyword arguments to pass to pseudo_parallactic_angle.  Defaults
-#         are generally appropriate for Rubin Observatory.
-
-#     Returns
-#     -------
-#     rsp : float
-#         RotSkyPos in degrees.
-#     """
-#     q = pseudo_parallactic_angle(ra, dec, mjd, **kwargs)
-#     return Angle((270 - rotSkyPos + q)*u.deg).wrap_at(180 * u.deg)
-    
 def addFieldCoords_to_Table( table, camera ):
     """Extend the given table with additional columns.
 
@@ -163,7 +39,7 @@ def addFieldCoords_to_Table( table, camera ):
     field_points_rot = []
 
     rot = table.meta['ocRot']
-    
+
     for row in table:
         point = Point2D(row['slot_Centroid_x'], row['slot_Centroid_y'])
         det = camera[row['detector']]
@@ -183,7 +59,7 @@ def addFieldCoords_to_Table( table, camera ):
 
     # table[prefix + "_x"] = rot[0, 0] * table["x"] + rot[0, 1] * table["y"]
     # table[prefix + "_y"] = rot[1, 0] * table["x"] + rot[1, 1] * table["y"]
-    
+
     return table
 
 def makeOCSPlot(
@@ -193,7 +69,7 @@ def makeOCSPlot(
     camera: Camera,
     maxPoints: int = 1000,
     saveAs: str = "",
-    autoscale = True, 
+    autoscale = True,
     scalemin_e = 0.,
     scalemax_e = 0.45,
     scalemin_e1 = -0.2,
@@ -201,7 +77,8 @@ def makeOCSPlot(
     scalemin_e2 = -0.2,
     scalemax_e2 = 0.2,
     scale_quiver = 0.2,
-    size_quiver = 0.1
+    size_quiver = 0.1,
+    coords: str = "aa"
 ):
     """Plot the PSFs on the focal plane, rotated to az/el which is taken to be OCS.
 
@@ -246,31 +123,46 @@ def makeOCSPlot(
     quiverScale = None if oneRaftOnly else fullCameraFactor
 
     table = randomRows(table, maxPoints)
+    
+    if coords == 'aa':
+        col_x = 'aa_x'
+        col_y = 'aa_y'
+        col_e1 = 'aa_e1'
+        col_e2 = 'aa_e2'
+        col_e = 'aa_e'
+        col_t = 'aa_T'
+    else:
+        col_x = 'oc_field_x'
+        col_y = 'oc_field_y'
+        col_e1 = 'oc_e1'
+        col_e2 = 'oc_e2'
+        col_e = 'e'
+        col_t = 'T'
 
     if autoscale:
-        cbar = addColorbarToAxes(axes[0, 0].scatter(table["oc_field_x"], table["oc_field_y"], c=table["T"], s=5))
-        cbar.set_label("T [arcsec$^2$]")
-    
-        emax = np.quantile(np.abs(np.concatenate([table["oc_e1"], table["oc_e2"]])), 0.98)
+        cbar = addColorbarToAxes(axes[0, 0].scatter(table[col_x], table[col_y], c=table[col_t], s=5))
+        cbar.set_label("T [arcsec2]")
+
+        emax = np.quantile(np.abs(np.concatenate([table[col_e1], table[col_e2]])), 0.98)
         cbar = addColorbarToAxes(
             axes[1, 0].scatter(
-                table["oc_field_x"], table["oc_field_y"], c=table["oc_e1"], vmin=-emax, vmax=emax, cmap="bwr", s=5
+                table[col_x], table[col_y], c=table[col_e1], vmin=-emax, vmax=emax, cmap="bwr", s=5
             )
         )
         cbar.set_label("e1")
-    
+
         cbar = addColorbarToAxes(
             axes[1, 1].scatter(
-                table["oc_field_x"], table["oc_field_y"], c=table["oc_e2"], vmin=-emax, vmax=emax, cmap="bwr", s=5
+                table[col_x], table[col_y], c=table[col_e2], vmin=-emax, vmax=emax, cmap="bwr", s=5
             )
         )
         cbar.set_label("e2")
-    
+
         Q = axes[0, 1].quiver(
-            table["oc_field_x"],
-            table["oc_field_y"],
-            table["e"] * np.cos(0.5 * np.arctan2(table["oc_e2"], table["oc_e1"])),
-            table["e"] * np.sin(0.5 * np.arctan2(table["oc_e2"], table["oc_e1"])),
+            table[col_x],
+            table[col_y],
+            table[col_e] * np.cos(0.5 * np.arctan2(table[col_e2], table[col_e1])),
+            table[col_e] * np.sin(0.5 * np.arctan2(table[col_e2], table[col_e1])),
             headlength=0,
             headaxislength=0,
             scale=quiverScale,
@@ -279,30 +171,30 @@ def makeOCSPlot(
         axes[0, 1].quiverkey(Q, X=0.08, Y=0.95, U=size_quiver, label="{:4.2f}".format(size_quiver), labelpos="S")
 
     else:
-        cbar = addColorbarToAxes(axes[0, 0].scatter(table["oc_field_x"], table["oc_field_y"], c=table["T"], 
+        cbar = addColorbarToAxes(axes[0, 0].scatter(table[col_x], table[col_y], c=table[col_t],
                                                     s=5, vmin=scalemin_e, vmax=scalemax_e))
-        cbar.set_label("T [arcsec$^2$]")
-    
-        emax = np.quantile(np.abs(np.concatenate([table["oc_e1"], table["oc_e2"]])), 0.98)
+        cbar.set_label("T [arcsec2]")
+
+        emax = np.quantile(np.abs(np.concatenate([table[col_e1], table[col_e2]])), 0.98)
         cbar = addColorbarToAxes(
             axes[1, 0].scatter(
-                table["oc_field_x"], table["oc_field_y"], c=table["oc_e1"], vmin=scalemin_e1, vmax=scalemax_e1, cmap="bwr", s=5
+                table[col_x], table[col_y], c=table[col_e1], vmin=scalemin_e1, vmax=scalemax_e1, cmap="bwr", s=5
             )
         )
         cbar.set_label("e1")
-    
+
         cbar = addColorbarToAxes(
             axes[1, 1].scatter(
-                table["oc_field_x"], table["oc_field_y"], c=table["oc_e2"], vmin=scalemin_e2, vmax=scalemax_e2, cmap="bwr", s=5
+                table[col_x], table[col_y], c=table[col_e2], vmin=scalemin_e2, vmax=scalemax_e2, cmap="bwr", s=5
             )
         )
         cbar.set_label("e2")
-    
+
         Q = axes[0, 1].quiver(
-            table["oc_field_x"],
-            table["oc_field_y"],
-            table["e"] * np.cos(0.5 * np.arctan2(table["oc_e2"], table["oc_e1"])),
-            table["e"] * np.sin(0.5 * np.arctan2(table["oc_e2"], table["oc_e1"])),
+            table[col_x],
+            table[col_y],
+            table[col_e] * np.cos(0.5 * np.arctan2(table[col_e2], table[col_e1])),
+            table[col_e] * np.sin(0.5 * np.arctan2(table[col_e2], table[col_e1])),
             headlength=0,
             headaxislength=0,
             scale=scale_quiver,
@@ -319,7 +211,7 @@ def makeOCSPlot(
 
     # Plot camera detector outlines - only plot labels on single-raft cameras;
     # otherwise it is overwhelming
-    
+
     # if oneRaftOnly:
     #     aaRot = table.meta["ocRot"]
     #     for det in camera:
@@ -357,7 +249,7 @@ def makeOCSPlot(
     fig.tight_layout()
     if saveAs:
         fig.savefig(saveAs)
-        
+
 def makeOCSPlot_bk(
     fig: plt.Figure,
     axes: np.ndarray[plt.Axes],
@@ -411,7 +303,7 @@ def makeOCSPlot_bk(
     table = randomRows(table, maxPoints)
 
     cbar = addColorbarToAxes(axes[0, 0].scatter(table["oc_field_x"], table["oc_field_y"], c=table["T"], s=5))
-    cbar.set_label("T [arcsec$^2$]")
+    cbar.set_label("T [arcsec2]")
 
     emax = np.quantile(np.abs(np.concatenate([table["e1"], table["e2"]])), 0.98)
     cbar = addColorbarToAxes(
@@ -449,7 +341,7 @@ def makeOCSPlot_bk(
 
     # Plot camera detector outlines - only plot labels on single-raft cameras;
     # otherwise it is overwhelming
-    
+
     if oneRaftOnly:
         aaRot = table.meta["ocRot"]
         for det in camera:
@@ -502,17 +394,16 @@ def read_batoid_table( fname ):
  'mod_mxx',
  'mod_myy',
  'mod_mxy']"""
-    
+
     table = ascii.read( fname, data_start=1, delimiter=',',header_start=0)
-    
 
     # table["Ixx"] = table["slot_Shape_xx"] * (0.2) ** 2
     # table["Ixy"] = table["slot_Shape_xy"] * (0.2) ** 2
     # table["Iyy"] = table["slot_Shape_yy"] * (0.2) ** 2
 
     # # assume some numbers for dispersion correction to check if we can make a square become a circle
-    # table['aa_Iyy'] = table['aa_Iyy'] - (0.05)**2 
-    
+    # table['aa_Iyy'] = table['aa_Iyy'] - (0.05)**2
+
     table["T"] = table["aa_Ixx"] + table["aa_Iyy"]
     table["e1"] = (table["aa_Ixx"] - table["aa_Iyy"]) / table["T"]
     table["e2"] = 2 * table["aa_Ixy"] / table["T"]
@@ -524,7 +415,7 @@ def read_batoid_table( fname ):
     table["e_mod"] = np.hypot(table["e1_mod"], table["e2_mod"])
 
     return table
-    
+
 def addOpticalCoords_to_Table( table ):
     # We call extendTable to add the optical system coordinate system which is almost aa but with an extra flip of the original Y axis.
 
@@ -537,12 +428,12 @@ def addOpticalCoords_to_Table( table ):
 def makeTableFromCalexps(calexps, sourcess, psfs, elevation_angle, visitInfo):
 
     for calexp, source, psf in zip(calexps, sourcess, psfs):
-    
+
         e_star, ex_star_dvcs, ey_star_dvcs, ex_rot_star_dvcs, ey_rot_star_dvcs, i_xx_star, i_yy_star, i_xy_star, \
             aaIxx_star, aaIxy_star, aaIyy_star, e1, e2, xx_star_dvcs, yy_star_dvcs, theta_star_dvcs, \
             xx_rot_star_dvcs, yy_rot_star_dvcs, ra_star_dvcs, dec_star_dvcs, fwhm, size, fluxes_star = \
-            calculate_ellipticity_on_xy(calexp, sources, psf, 1, n_grid=0, 
-            rotation_sticks=2, do_flip=False, do_ad_correction=True, 
+            calculate_ellipticity_on_xy(calexp, sources, psf, 1, n_grid=0,
+            rotation_sticks=2, do_flip=False, do_ad_correction=True,
             zenith_angle=90.-elevation_angle)
 
     table = Table()
@@ -551,64 +442,6 @@ def makeTableFromCalexps(calexps, sourcess, psfs, elevation_angle, visitInfo):
     table["oc_field_y"] = yy_rot_star_dvcs
 
     return table
-
-# def makeTableFromCalexps(icSrcs: dict[int, SourceCatalog], visitInfo: VisitInfo) -> Table:
-    # """Extract the shapes from the source catalogs into an astropy table.
-
-    # The shapes of the PSF candidates are extracted from the source catalogs and
-    # transformed into the required coordinate systems for plotting either focal
-    # plane coordinates, az/el coordinates, or equatorial coordinates.
-
-    # Parameters
-    # ----------
-    # icSrcs : `dict` [`int`, `lsst.afw.table.SourceCatalog`]
-    #     A dictionary of source catalogs, keyed by the detector numbers.
-    # visitInfo : `lsst.afw.image.VisitInfo`
-    #     The visit information for a representative visit.
-
-    # Returns
-    # -------
-    # table : `astropy.table.Table`
-    #     The table containing the data from the source catalogs.
-    # """
-    # tables = []
-
-    # for detectorNum, icSrc in icSrcs.items():
-    #     icSrc = icSrc.asAstropy()
-    #     icSrc = icSrc[icSrc["calib_psf_candidate"]]
-    #     icSrc["detector"] = detectorNum
-    #     tables.append(icSrc)
-
-    # table = vstack(tables)
-    # # Add shape columns
-    # table["Ixx"] = table["slot_Shape_xx"] * (0.2) ** 2
-    # table["Ixy"] = table["slot_Shape_xy"] * (0.2) ** 2
-    # table["Iyy"] = table["slot_Shape_yy"] * (0.2) ** 2
-    # table["T"] = table["Ixx"] + table["Iyy"]
-    # table["e1"] = (table["Ixx"] - table["Iyy"]) / table["T"]
-    # table["e2"] = 2 * table["Ixy"] / table["T"]
-    # table["e"] = np.hypot(table["e1"], table["e2"])
-    # table["x"] = table["base_FPPosition_x"]
-    # table["y"] = table["base_FPPosition_y"]
-
-    # table.meta["rotTelPos"] = (
-    #     visitInfo.boresightParAngle - visitInfo.boresightRotAngle - (np.pi / 2 * radians)
-    # ).asRadians()
-    # table.meta["rotSkyPos"] = visitInfo.boresightRotAngle.asRadians()
-
-    # rtp = table.meta["rotTelPos"]
-    # srtp, crtp = np.sin(rtp), np.cos(rtp)
-    # aaRot = np.array([[crtp, srtp], [-srtp, crtp]]) @ np.array([[0, 1], [1, 0]]) @ np.array([[-1, 0], [0, 1]])
-    # table = extendTable(table, aaRot, "aa")
-    # table.meta["aaRot"] = aaRot
-
-    # rsp = table.meta["rotSkyPos"]
-    # srsp, crsp = np.sin(rsp), np.cos(rsp)
-    # nwRot = np.array([[crsp, -srsp], [srsp, crsp]])
-    # table = extendTable(table, nwRot, "nw")
-    # table.meta["nwRot"] = nwRot
-
-    # return table
 
 def MakeGridMedianPSF(table, nx, ny, min_cell):
     """Builds a table, in OC coordinates, where the PSF moments are stored
@@ -623,15 +456,15 @@ def MakeGridMedianPSF(table, nx, ny, min_cell):
     ny : `int`
         The number of points of the grid to be created on the OC y axis.
     min_cell : `int`
-        The minimum number of stars in the cell around the x,y positions in the grid. 
-        If the number of star is smaller than min_cell, no median will be performed. 
-        
+        The minimum number of stars in the cell around the x,y positions in the grid.
+        If the number of star is smaller than min_cell, no median will be performed.
+
     Returns
     -------
     table_grid : `astropy.table.Table`
         The new table with gridded medians.
     """
-    
+
 # Build the grid
     min_x = min(table['oc_field_x'])
     min_y = min(table['oc_field_y'])
@@ -651,12 +484,20 @@ def MakeGridMedianPSF(table, nx, ny, min_cell):
     Ixx_oc_grid = []
     Iyy_oc_grid = []
     Ixy_oc_grid = []
+    ext_shapeHSM_HigherOrderMomentsSource_30_grid = []
+    ext_shapeHSM_HigherOrderMomentsSource_12_grid = []
+    ext_shapeHSM_HigherOrderMomentsSource_21_grid = []
+    ext_shapeHSM_HigherOrderMomentsSource_03_grid = []
+    ext_shapeHSM_HigherOrderMomentsSource_40_grid = []
+    ext_shapeHSM_HigherOrderMomentsSource_04_grid = []
+    ext_shapeHSM_HigherOrderMomentsSource_22_grid = []
+
     oc_grid_x_median = []
     oc_grid_y_median = []
     n_stars_in_cells = []
     grid_id = []
     all_ids = []
-    
+
     iii = 0
     for x, y in zip(xx_for_zip, yy_for_zip):
 
@@ -664,7 +505,7 @@ def MakeGridMedianPSF(table, nx, ny, min_cell):
         ind_temp = (table['oc_field_x'] > (x - step_x/2.)) & (table['oc_field_x'] <= (x + step_x/2.)) & (table['oc_field_y'] > (y - step_y/2.)) & (table['oc_field_y'] <= (y + step_y/2.))
         itemindex = np.where(ind_temp == True)
         n_stars_in_cell = len(itemindex[0])
-        
+
         oc_grid_x_median.append(np.median(table['oc_field_x'][itemindex]))
         oc_grid_y_median.append(np.median(table['oc_field_y'][itemindex]))
         n_stars_in_cells.append(n_stars_in_cell)
@@ -674,20 +515,34 @@ def MakeGridMedianPSF(table, nx, ny, min_cell):
             Ixx_oc_grid.append(np.median(table['oc_Ixx'][itemindex]))
             Iyy_oc_grid.append(np.median(table['oc_Iyy'][itemindex]))
             Ixy_oc_grid.append(np.median(table['oc_Ixy'][itemindex]))
+            ext_shapeHSM_HigherOrderMomentsSource_30_grid.append(np.median(table['ext_shapeHSM_HigherOrderMomentsSource_30'][itemindex]))
+            ext_shapeHSM_HigherOrderMomentsSource_12_grid.append(np.median(table['ext_shapeHSM_HigherOrderMomentsSource_12'][itemindex]))
+            ext_shapeHSM_HigherOrderMomentsSource_21_grid.append(np.median(table['ext_shapeHSM_HigherOrderMomentsSource_21'][itemindex]))
+            ext_shapeHSM_HigherOrderMomentsSource_03_grid.append(np.median(table['ext_shapeHSM_HigherOrderMomentsSource_03'][itemindex]))
+            ext_shapeHSM_HigherOrderMomentsSource_40_grid.append(np.median(table['ext_shapeHSM_HigherOrderMomentsSource_40'][itemindex]))
+            ext_shapeHSM_HigherOrderMomentsSource_04_grid.append(np.median(table['ext_shapeHSM_HigherOrderMomentsSource_04'][itemindex]))
+            ext_shapeHSM_HigherOrderMomentsSource_22_grid.append(np.median(table['ext_shapeHSM_HigherOrderMomentsSource_22'][itemindex]))
         else:
             Ixx_oc_grid.append(np.median(np.nan))
             Iyy_oc_grid.append(np.median(np.nan))
             Ixy_oc_grid.append(np.median(np.nan))
+            ext_shapeHSM_HigherOrderMomentsSource_30_grid.append(np.median(np.nan))
+            ext_shapeHSM_HigherOrderMomentsSource_12_grid.append(np.median(np.nan))
+            ext_shapeHSM_HigherOrderMomentsSource_21_grid.append(np.median(np.nan))
+            ext_shapeHSM_HigherOrderMomentsSource_03_grid.append(np.median(np.nan))
+            ext_shapeHSM_HigherOrderMomentsSource_40_grid.append(np.median(np.nan))
+            ext_shapeHSM_HigherOrderMomentsSource_04_grid.append(np.median(np.nan))
+            ext_shapeHSM_HigherOrderMomentsSource_22_grid.append(np.median(np.nan))
 
         iii = iii + 1
 
     # print(grid_id.flatten())
     # print(all_ids.flatten())
-    
+
     table_grid = Table()
 
     table_grid["oc_id"] = np.arange(yy_for_zip.size)
-              
+
     table_grid["oc_field_x"] = xx_for_zip
     table_grid["oc_field_y"] = yy_for_zip
 
@@ -696,12 +551,20 @@ def MakeGridMedianPSF(table, nx, ny, min_cell):
     table_grid["oc_y_median"] = oc_grid_y_median
 
     table_grid["n_stars_in_cells"] = n_stars_in_cells
-    
+
     # Median moments
     table_grid["oc_Ixx"] = Ixx_oc_grid
     table_grid["oc_Ixy"] = Ixy_oc_grid
     table_grid["oc_Iyy"] = Iyy_oc_grid
-              
+
+    table_grid["ext_shapeHSM_HigherOrderMomentsSource_30"] = ext_shapeHSM_HigherOrderMomentsSource_30_grid
+    table_grid["ext_shapeHSM_HigherOrderMomentsSource_12"] = ext_shapeHSM_HigherOrderMomentsSource_12_grid
+    table_grid["ext_shapeHSM_HigherOrderMomentsSource_21"] = ext_shapeHSM_HigherOrderMomentsSource_21_grid
+    table_grid["ext_shapeHSM_HigherOrderMomentsSource_03"] = ext_shapeHSM_HigherOrderMomentsSource_03_grid
+    table_grid["ext_shapeHSM_HigherOrderMomentsSource_40"] = ext_shapeHSM_HigherOrderMomentsSource_40_grid
+    table_grid["ext_shapeHSM_HigherOrderMomentsSource_04"] = ext_shapeHSM_HigherOrderMomentsSource_04_grid
+    table_grid["ext_shapeHSM_HigherOrderMomentsSource_22"] = ext_shapeHSM_HigherOrderMomentsSource_22_grid
+
     # Ellipticities
     table_grid["T"] = table_grid["oc_Ixx"] + table_grid["oc_Iyy"]
     table_grid["oc_e1"] = (table_grid["oc_Ixx"] - table_grid["oc_Iyy"]) / table_grid["T"]
@@ -711,7 +574,7 @@ def MakeGridMedianPSF(table, nx, ny, min_cell):
     # Add metadata
     table_grid.meta["ocRot"] = table.meta["ocRot"]
     table_grid.meta["rotTelPos"] = table.meta["rotTelPos"]
-    
+
     return table_grid
 
 def statistics_on_moments(table, minflux=-9.):
@@ -722,48 +585,96 @@ def statistics_on_moments(table, minflux=-9.):
     table : `astropy.table.Table`
         The input table containing the original shapes.
     minflux : `float`
-        The flux (in base_CircularApertureFlux_6_0_instFlux) 
+        The flux (in base_CircularApertureFlux_6_0_instFlux)
         below which the stars should be discarded for the calculation of statistics
-        
+
     Returns
     -------
     statistics : `astropy.table.Table`
         A table with the statistics on moments.
     """
-    
+
     # Selezione solo su flussi maggiori di una certa quantità
     ind_good = table['base_CircularApertureFlux_6_0_instFlux'] >= minflux
 
     table = table[ind_good]
-    
+
+    ext_shapeHSM_HigherOrderMomentsSource_30_mean = np.mean(table['ext_shapeHSM_HigherOrderMomentsSource_30'].value)
+    ext_shapeHSM_HigherOrderMomentsSource_30_median = np.median(table['ext_shapeHSM_HigherOrderMomentsSource_30'].value)
+    ext_shapeHSM_HigherOrderMomentsSource_30_std = np.std(table['ext_shapeHSM_HigherOrderMomentsSource_30'].value)
+
+    ext_shapeHSM_HigherOrderMomentsSource_03_mean = np.mean(table['ext_shapeHSM_HigherOrderMomentsSource_03'].value)
+    ext_shapeHSM_HigherOrderMomentsSource_03_median = np.median(table['ext_shapeHSM_HigherOrderMomentsSource_03'].value)
+    ext_shapeHSM_HigherOrderMomentsSource_03_std = np.std(table['ext_shapeHSM_HigherOrderMomentsSource_03'].value)
+
+    ext_shapeHSM_HigherOrderMomentsSource_22_mean = np.mean(table['ext_shapeHSM_HigherOrderMomentsSource_22'].value)
+    ext_shapeHSM_HigherOrderMomentsSource_22_median = np.median(table['ext_shapeHSM_HigherOrderMomentsSource_22'].value)
+    ext_shapeHSM_HigherOrderMomentsSource_22_std = np.std(table['ext_shapeHSM_HigherOrderMomentsSource_22'].value)
+
+    ext_shapeHSM_HigherOrderMomentsSource_21_mean = np.mean(table['ext_shapeHSM_HigherOrderMomentsSource_21'].value)
+    ext_shapeHSM_HigherOrderMomentsSource_21_median = np.median(table['ext_shapeHSM_HigherOrderMomentsSource_21'].value)
+    ext_shapeHSM_HigherOrderMomentsSource_21_std = np.std(table['ext_shapeHSM_HigherOrderMomentsSource_21'].value)
+
+    ext_shapeHSM_HigherOrderMomentsSource_12_mean = np.mean(table['ext_shapeHSM_HigherOrderMomentsSource_12'].value)
+    ext_shapeHSM_HigherOrderMomentsSource_12_median = np.median(table['ext_shapeHSM_HigherOrderMomentsSource_12'].value)
+    ext_shapeHSM_HigherOrderMomentsSource_12_std = np.std(table['ext_shapeHSM_HigherOrderMomentsSource_12'].value)
+
+    ext_shapeHSM_HigherOrderMomentsSource_40_mean = np.mean(table['ext_shapeHSM_HigherOrderMomentsSource_40'].value)
+    ext_shapeHSM_HigherOrderMomentsSource_40_median = np.median(table['ext_shapeHSM_HigherOrderMomentsSource_40'].value)
+    ext_shapeHSM_HigherOrderMomentsSource_40_std = np.std(table['ext_shapeHSM_HigherOrderMomentsSource_40'].value)
+
+    ext_shapeHSM_HigherOrderMomentsSource_04_mean = np.mean(table['ext_shapeHSM_HigherOrderMomentsSource_04'].value)
+    ext_shapeHSM_HigherOrderMomentsSource_04_median = np.median(table['ext_shapeHSM_HigherOrderMomentsSource_04'].value)
+    ext_shapeHSM_HigherOrderMomentsSource_04_std = np.std(table['ext_shapeHSM_HigherOrderMomentsSource_04'].value)
+
     oc_ixx_mean = np.mean(table['oc_Ixx'].value)
     oc_ixx_median = np.median(table['oc_Ixx'].value)
     oc_ixx_std = np.std(table['oc_Ixx'].value)
-    
+
     oc_iyy_mean = np.mean(table['oc_Iyy'].value)
     oc_iyy_median = np.median(table['oc_Iyy'].value)
     oc_iyy_std = np.std(table['oc_Iyy'].value)
-    
+
     oc_ixy_mean = np.mean(table['oc_Ixy'].value)
     oc_ixy_median = np.median(table['oc_Ixy'].value)
     oc_ixy_std = np.std(table['oc_Ixy'].value)
-    
+
     oc_e1_mean = np.mean(table['oc_e1'].value)
     oc_e1_median = np.median(table['oc_e1'].value)
     oc_e1_std = np.std(table['oc_e1'].value)
-    
+
     oc_e2_mean = np.mean(table['oc_e2'].value)
     oc_e2_median = np.median(table['oc_e2'].value)
     oc_e2_std = np.std(table['oc_e2'].value)
-    
+
     aa_e_mean = np.mean(table['aa_e'].value)
     aa_e_median = np.median(table['aa_e'].value)
     aa_e_std = np.std(table['aa_e'].value)
-    
+
+    coma1_mean = np.mean(table['coma1'].value)
+    coma1_median = np.median(table['coma1'].value)
+    coma1_std = np.std(table['coma1'].value)
+
+    coma2_mean = np.mean(table['coma2'].value)
+    coma2_median = np.median(table['coma2'].value)
+    coma2_std = np.std(table['coma2'].value)
+
+    trefoil1_mean = np.mean(table['trefoil1'].value)
+    trefoil1_median = np.median(table['trefoil1'].value)
+    trefoil1_std = np.std(table['trefoil1'].value)
+
+    trefoil2_mean = np.mean(table['trefoil2'].value)
+    trefoil2_median = np.median(table['trefoil2'].value)
+    trefoil2_std = np.std(table['trefoil2'].value)
+
+    kurtosis_mean = np.mean(table['kurtosis'].value)
+    kurtosis_median = np.median(table['kurtosis'].value)
+    kurtosis_std = np.std(table['kurtosis'].value)
+
     e_mean = np.mean(table['e'].value)
     e_median = np.median(table['e'].value)
     e_std = np.std(table['e'].value)
-    
+
     T_mean = np.mean(table['T'].value)
     T_median = np.median(table['T'].value)
     T_std = np.std(table['T'].value)
@@ -793,239 +704,207 @@ def statistics_on_moments(table, minflux=-9.):
     statistics['aa_e_std'] = [aa_e_std]
     statistics['e_std'] = [e_std]
     statistics['T_std'] = [T_std]
-    
+
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_30_mean'] = [ext_shapeHSM_HigherOrderMomentsSource_30_mean]
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_30_median'] = [ext_shapeHSM_HigherOrderMomentsSource_30_median]
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_30_std'] = [ext_shapeHSM_HigherOrderMomentsSource_30_std]
+
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_03_mean'] = [ext_shapeHSM_HigherOrderMomentsSource_03_mean]
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_03_median'] = [ext_shapeHSM_HigherOrderMomentsSource_03_median]
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_03_std'] = [ext_shapeHSM_HigherOrderMomentsSource_03_std]
+
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_22_mean'] = [ext_shapeHSM_HigherOrderMomentsSource_22_mean]
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_22_median'] = [ext_shapeHSM_HigherOrderMomentsSource_22_median]
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_22_std'] = [ext_shapeHSM_HigherOrderMomentsSource_22_std]
+
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_21_mean'] = [ext_shapeHSM_HigherOrderMomentsSource_21_mean]
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_21_median'] = [ext_shapeHSM_HigherOrderMomentsSource_21_median]
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_21_std'] = [ext_shapeHSM_HigherOrderMomentsSource_21_std]
+
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_12_mean'] = [ext_shapeHSM_HigherOrderMomentsSource_12_mean]
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_12_median'] = [ext_shapeHSM_HigherOrderMomentsSource_12_median]
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_12_std'] = [ext_shapeHSM_HigherOrderMomentsSource_12_std]
+
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_40_mean'] = [ext_shapeHSM_HigherOrderMomentsSource_40_mean]
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_40_median'] = [ext_shapeHSM_HigherOrderMomentsSource_40_median]
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_40_std'] = [ext_shapeHSM_HigherOrderMomentsSource_40_std]
+
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_04_mean'] = [ext_shapeHSM_HigherOrderMomentsSource_04_mean]
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_04_median'] = [ext_shapeHSM_HigherOrderMomentsSource_04_median]
+    statistics['ext_shapeHSM_HigherOrderMomentsSource_04_std'] = [ext_shapeHSM_HigherOrderMomentsSource_04_std]
+
     return statistics
 
+def addHigherMoments(table):
+    table["coma1"] = (table["ext_shapeHSM_HigherOrderMomentsSource_30"]
+                + table["ext_shapeHSM_HigherOrderMomentsSource_12"])
+    table["coma2"] = (table["ext_shapeHSM_HigherOrderMomentsSource_21"]
+                + table["ext_shapeHSM_HigherOrderMomentsSource_03"])
+    table["trefoil1"] = (table["ext_shapeHSM_HigherOrderMomentsSource_30"]
+                - 3 * table["ext_shapeHSM_HigherOrderMomentsSource_12"])
+    table["trefoil2"] = (3 * table["ext_shapeHSM_HigherOrderMomentsSource_21"]
+                - table["ext_shapeHSM_HigherOrderMomentsSource_03"])
+    table["kurtosis"] = (table["ext_shapeHSM_HigherOrderMomentsSource_40"]
+                + table["ext_shapeHSM_HigherOrderMomentsSource_04"]
+                + 2 * table["ext_shapeHSM_HigherOrderMomentsSource_22"])
 
-# #XXX
-# def calculate_ellipticity_on_xy(calexp, sources, psf, regular_grid_or_star_positions, 
-#                                 rotation_sticks=1, do_flip=True, do_ad_correction=True, 
-#                                 zenith_angle=0., pressure=727, temperature=6.85, n_grid=200, fileout=''):
+    return table
 
-#     #rotation_sticks= 1: rotazione di entità +rottelpos_radians degli sticks
-#     #rotation_sticks= 0: nessuna rotazione degli sticks
-#     #rotation_sticks=-1: rotazione di entità -rottelpos_radians degli sticks
-#     #rotation_sticks=2: rotazione alla Josh con Quadrupole
+def randomRowsPerDetector(table: Table, maxRowsPerDetector: int) -> Table:
+    """Select a random subset of rows for each detector from the given table.
 
-#     det = calexp.getDetector()
-#     wcs = calexp.getWcs()
-#     visit_id = calexp.info.getVisitInfo().getId()
+    Parameters
+    ----------
+    table : `astropy.table.Table`
+        The table containing the data to be plotted.
+    maxRowsPerDetector : `int`
+        The maximum number of rows to select per detector.
 
-#     passband = calexp.getInfo().getFilter().bandLabel
-    
-#     rotskypos = (calexp.info.getVisitInfo().getBoresightRotAngle()).asDegrees()
-#     rottelpos = rsp_to_rtp(rotskypos, \
-#             (calexp.info.getVisitInfo().getBoresightRaDec())[0].asDegrees(), \
-#             (calexp.info.getVisitInfo().getBoresightRaDec())[1].asDegrees(), \
-#             calexp.info.getVisitInfo().getDate().toAstropy()).deg
-#     rottelpos_radians = np.radians(rottelpos)
+    Returns
+    -------
+    table : `astropy.table.Table`
+        The table containing the randomly selected subset of rows.
+    """
+    keep = np.full(len(table), False)
+    for det in np.unique(table["detector"]):
+        detrows = np.nonzero(table["detector"] == det)[0]
+        if len(detrows) > maxRowsPerDetector:
+            rng = np.random.default_rng()
+            detrows = rng.choice(detrows, maxRowsPerDetector, replace=False)
+        keep[detrows] = True
+    return table[keep]
 
-#     if rotation_sticks>=1:
-#         rottelpos_radians_for_ellipticitysticks = rottelpos_radians
-#     elif rotation_sticks==0:
-#         rottelpos_radians_for_ellipticitysticks = 0.
-#     elif rotation_sticks==-1:
-#         rottelpos_radians_for_ellipticitysticks = -rottelpos_radians
+def plotHigherOrderMomentsData(
+    fig: plt.Figure, # modded
+    axs: np.ndarray[plt.Axes], # modded
+    # axs: npt.NDArray[np.object_], # modded
+    table: Table,
+    prefix: str = "",
+    binSpacing: float = 0.1,
+    is_grid = False,
+    maxPointsPerDetector: int = 5,
+):
+    """Plot coma, trefoil and kurtosis from the table on the provided axes.
 
-#     crtp = np.cos(rottelpos_radians)
-#     srtp = np.sin(rottelpos_radians)
+    Parameters
+    ----------
+    axs : `numpy.ndarray`
+        The array of axes objects to plot on.
+    table : `Table`
+        The table containing the data to plot.
+    prefix : `str`, optional
+        The prefix to use for the column names in the table.
+    binSpacing : `float`, optional
+        The spacing between arrows and triangles in the plot.
+    maxPointsPerDetector : `int`, optional
+        The maximum number of points per detector to plot. If the number of
+        points exceeds this value, a random subset will be selected.
+    """
+    if not is_grid:
+        table = randomRowsPerDetector(table, maxPointsPerDetector)
 
-#     # aa sta per Alt-Azimuth, trasformazione da codice di Josh:
-#     # https://github.com/lsst-sitcom/summit_extras/blob/main/python/lsst/summit/extras/plotting/psfPlotting.py
-#     aaRot = np.array([[crtp, srtp], [-srtp, crtp]]) @ np.array([[0, 1], [1, 0]]) @ np.array([[-1, 0], [0, 1]])
-#     ocRot = np.array([[1, 0], [0, -1]]) @ aaRot # Rotazione Ricardo
-#     transform_for_ell = LinearTransform(aaRot)
+    x = table[prefix + "x"]
+    y = table[prefix + "y"]
+    kurtosis = table["kurtosis"]
 
-#     # ------------Get the points on grid/star positions (in CCS)------------
-#     if regular_grid_or_star_positions == 0:
-#         # Per la visualizzazione della PSF su griglia regolare
-#         grid_separation_x = calexp.getDimensions()[0] / n_grid
-#         grid_separation_y = calexp.getDimensions()[1] / n_grid
-#         x_array = np.arange(n_grid)*grid_separation_x + grid_separation_x/2.
-#         y_array = np.arange(n_grid)*grid_separation_y + grid_separation_y/2.
-#         xx, yy = np.meshgrid(x_array, y_array)
-#         xx_for_zip = xx.flatten()
-#         yy_for_zip = yy.flatten()
-#         xxshape = n_grid*n_grid
+    quiverKwargs = {
+        "headlength": 5,
+        "headaxislength": 5,
+        "scale": 1,
+        "pivot": "middle",
+        "width": 0.002,
+    }
 
-#     elif regular_grid_or_star_positions == 1:
-#         # Per la visualizzazione della PSF sulle coordinate delle stelle
-#         xx = [l.getCentroid()[0] for l in sources]
-#         yy = [l.getCentroid()[1] for l in sources]
-#         xx_for_zip = xx
-#         yy_for_zip = yy
-#         xxshape = len(xx)
-#         fluxes = [l.getPsfInstFlux() for l in sources]
+    coords = np.vstack([x, y]).T
+    meanComa = {}
+    for i in (1, 2):
+        binning = meanify(binSpacing)
+        binning.add_field(coords, table[f"coma{i}"])
+        binning.meanify()
+        meanComa[i] = binning.params0
 
-#         # xx_fpposition = sources['base_FPPosition_x']
-#         # yy_fpposition = sources['base_FPPosition_y']
+    meanComaAngle = np.arctan2(meanComa[2], meanComa[1])
+    meanComaAmplitude = np.hypot(meanComa[2], meanComa[2])
+    qComa = axs[0].quiver(
+        binning.coords0[:, 0],
+        binning.coords0[:, 1],
+        meanComaAmplitude * np.cos(meanComaAngle),
+        meanComaAmplitude * np.sin(meanComaAngle),
+        **quiverKwargs,
+    )
+    axs[0].quiverkey(qComa, X=0.1, Y=0.88, U=0.05, label="0.05", labelpos="S")
 
-#     elif regular_grid_or_star_positions == 2:
-#         xx_for_zip = [2000.]
-#         yy_for_zip = [2000.]
-#         xxshape = len(xx_for_zip)
+    meanTrefoil = {}
+    for i in (1, 2):
+        binning = meanify(binSpacing)
+        binning.add_field(coords, table[f"trefoil{i}"])
+        binning.meanify()
+        meanTrefoil[i] = binning.params0
 
-#     # ------------convert CCS into DVCS and extract moments------------
-#     size = []
-#     i_xx = []
-#     i_yy = []
-#     i_xy = []
-#     points = []
+    meanTrefoilAngle = np.arctan2(meanTrefoil[2], meanTrefoil[1]) / 3  # spin-3
+    meanTrefoilAmplitude = np.hypot(meanTrefoil[2], meanTrefoil[1])
+    scaleTriangle = 500
+    # axs[1].scatter(250, 250, s=0.1 * scaleTriangle, marker=(3, 0, 30), lw=0.1, color="black")
+    # axs[1].text(270, 250, "0.1")
+    axs[1].scatter(0.8, 0.86, s=0.1 * scaleTriangle, marker=(3, 0, 30), lw=0.1, color="black", transform=axs[1].transAxes)
+    axs[1].text(0.82, 0.85, "0.1", transform=axs[1].transAxes)
+    for idx in range(len(meanTrefoilAmplitude)):
+        tVal = meanTrefoilAmplitude[idx]
+        trefoilAngleDeg = meanTrefoilAngle[idx] * 180 / np.pi
+        xCenter = binning.coords0[idx, 0]
+        yCenter = binning.coords0[idx, 1]
+        axs[1].scatter(
+            xCenter,
+            yCenter,
+            marker=(3, 0, 30 + trefoilAngleDeg),
+            s=tVal * scaleTriangle,
+            lw=0.1,
+            color="black",
+        )
 
-#     xx_star_dvcs = []
-#     yy_star_dvcs = []
-#     xx_rot_star_dvcs = []
-#     yy_rot_star_dvcs = []
-#     xx_ocrot_star = []
-#     yy_ocrot_star = []
-#     ra_star_dvcs = []
-#     dec_star_dvcs = []
-    
-#     for x, y in zip(xx_for_zip, yy_for_zip):
-#         point = Point2D(x, y)        
-#         coo = wcs.pixelToSky(x, y)
-#         cam_x, cam_y = pixel_to_camera_angle(point[0], point[1], det)
-#         x0, y0 = np.asarray(cam_x[0]), np.asarray(cam_y[0])
-#         # Rotazioni mie
-#         # xx_rot = x0*crtp - y0*srtp
-#         # yy_rot = x0*srtp + y0*crtp
-#         # Rotazioni Josh
-#         xx_rot = aaRot[0, 0] * x0 + aaRot[0, 1] * y0
-#         yy_rot = aaRot[1, 0] * x0 + aaRot[1, 1] * y0
-#         xx_ocrot = ocRot[0, 0] * x0 + ocRot[0, 1] * y0
-#         yy_ocrot = ocRot[1, 0] * x0 + ocRot[1, 1] * y0
+    pos = axs[1].get_position()  # get current position [left, bottom, width, height]
+    axs[1].set_position([pos.x0, pos.y0, pos.width * 0.931, pos.height])
 
-#         shape = psf.computeShape(point)
-#         size.append(shape.getTraceRadius())
-#         i_xx.append(shape.getIxx())
-#         i_yy.append(shape.getIyy())
-#         i_xy.append(shape.getIxy())
-#         points.append(point)
+    textKwargs = {
+        "x": 0.95,
+        "y": 0.95,
+        "ha": "right",
+        "va": "top",
+        "fontsize": 9,
+        "font": "monospace",
+    }
 
-#         if do_flip:
-#             xx_star_dvcs.append(cam_y[0])
-#             yy_star_dvcs.append(cam_x[0])
-#             xx_rot_star_dvcs.append(yy_rot)
-#             yy_rot_star_dvcs.append(xx_rot)
-#         else:
-#             xx_star_dvcs.append(cam_x[0])
-#             yy_star_dvcs.append(cam_y[0])
-#             xx_rot_star_dvcs.append(xx_rot)
-#             yy_rot_star_dvcs.append(yy_rot)
-#             xx_ocrot_star.append(xx_ocrot)
-#             yy_ocrot_star.append(yy_ocrot)
+    # Kurtosis hist
+    axs[2].hist(kurtosis, bins=int(np.sqrt(len(table))), color="C3")
 
-#         ra_star_dvcs.append(coo[0].asDegrees())
-#         dec_star_dvcs.append(coo[1].asDegrees())
+    kurtosisQuartiles = np.nanpercentile(kurtosis, [25, 50, 75])
 
-#     size = np.reshape(size, xxshape)
-#     i_xx = np.reshape(i_xx, xxshape)
-#     i_yy = np.reshape(i_yy, xxshape)
-#     i_xy = np.reshape(i_xy, xxshape)
+    s = "Kurtosis\n"
+    s += f"25%: {kurtosisQuartiles[0]:.3f}\n"
+    s += f"50%: {kurtosisQuartiles[1]:.3f}\n"
+    s += f"75%: {kurtosisQuartiles[2]:.3f}\n"
 
-#     table_moments = {'Ixx': i_xx, 'Iyy': i_yy, 'Ixy': i_xy}
+    # posizione della mediana rispetto all'intervallo dell'asse x
+    xmin, xmax = axs[2].get_xlim()
+    xmedian = (kurtosisQuartiles[1] - xmin) / (xmax - xmin)
 
-#     # ------------Transform moments into ellipticities------------
-#     theta = np.arctan2(2. * i_xy, i_xx - i_yy) / 2.
+    # se la linea mediana è nella zona occupata dal label,
+    # sposta il label a sinistra
+    if xmedian > 0.75:
+        textKwargs["x"] = 0.05
+        textKwargs["ha"] = "left"
 
-#     e1 = (i_xx - i_yy) / (i_xx + i_yy)
-#     e2 = (2. * i_xy) / (i_xx + i_yy)
-    
-#     theta_alternate = np.arctan2(e2, e1) / 2.
-#     assert np.allclose(theta, theta_alternate)
+    axs[2].text(
+        s=s,
+        transform=axs[2].transAxes,
+        **textKwargs,
+    )
 
-#     e_star = np.sqrt(e1**2 + e2**2)
-#     ex = e_star * np.cos(theta)
-#     ey = e_star * np.sin(theta)
+    axs[2].axvline(kurtosisQuartiles[0], color="grey", lw=1)
+    axs[2].axvline(kurtosisQuartiles[1], color="k", lw=2)
+    axs[2].axvline(kurtosisQuartiles[2], color="grey", lw=1)
 
-#     if do_flip:
-#     # --- Con inversione XY degli stick--- OBSOLETE!!!!
-#         # Rotazioni mie
-#         ey_star_dvcs = ex
-#         ex_star_dvcs = ey
-#         crtp_e = np.cos(rottelpos_radians_for_ellipticitysticks)
-#         srtp_e = np.sin(rottelpos_radians_for_ellipticitysticks)
-#         ey_rot_star_dvcs = ex*crtp_e - ey*srtp_e
-#         ex_rot_star_dvcs = ex*srtp_e + ey*crtp_e
-#     else:
-#     # --- Senza inversione XY degli stick--- DEFAULT!!!!
-#         ey_star_dvcs = ey
-#         ex_star_dvcs = ex
+    # axs[2].set_xlim([min(kurtosis), max(kurtosis)])
 
-#         # Rotazioni mie
-#         # ex_rot_star_dvcs = ex*crtp_e - ey*srtp_e
-#         # ey_rot_star_dvcs = ex*srtp_e + ey*crtp_e
-
-#         if rotation_sticks==2:
-#             # Rotazioni Josh (Quadrupole)
-#             rot_shapes = []
-#             for i_xx1, i_yy1, i_xy1 in zip(i_xx, i_yy, i_xy):
-#                 shape = Quadrupole(i_xx1, i_yy1, i_xy1)
-#                 rot_shapes.append(shape.transform(transform_for_ell))
-                
-#             aaIxx = np.asarray([sh.getIxx() for sh in rot_shapes])
-#             aaIyy = np.asarray([sh.getIyy() for sh in rot_shapes])
-#             aaIxy = np.asarray([sh.getIxy() for sh in rot_shapes])
-
-#             if do_ad_correction:
-#                 aaIyy = aaIyy - compute_atm_dispersion(zenith_angle, passband, pression=pressure, temperature=temperature)
-            
-#             e1_rot_star_dvcs = (aaIxx - aaIyy) / (aaIxx + aaIyy)
-#             e2_rot_star_dvcs = 2 * aaIxy / (aaIxx + aaIyy)    
-            
-#             theta_josh = np.arctan2(e2_rot_star_dvcs, e1_rot_star_dvcs) / 2.
-#             e_star = np.sqrt(e1_rot_star_dvcs**2 + e2_rot_star_dvcs**2)
-#             ex_rot_star_dvcs = e_star * np.cos(theta_josh)
-#             ey_rot_star_dvcs = e_star * np.sin(theta_josh)
-#         else:
-#             # Rotazioni con aaRot, tutte sbagliate???
-#             ex_rot_star_dvcs = aaRot[0, 0] * ex + aaRot[0, 1] * ey
-#             ey_rot_star_dvcs = aaRot[1, 0] * ex + aaRot[1, 1] * ey
-    
-#     theta_star_dvcs = np.arctan2(ey, ex)
-
-#     fwhm = []
-#     # FWHM
-#     for point in points:
-#         sigma = psf.computeShape(point).getDeterminantRadius()
-#         pixelScale = calexp.getWcs().getPixelScale().asArcseconds()
-#         fwhm_temp = sigma * pixelScale * 2.355
-#         fwhm.append(fwhm_temp)
-    
-#     if (regular_grid_or_star_positions == 0) | (regular_grid_or_star_positions == 2):
-#         if fileout != '':
-#             df = pd.DataFrame(data={'x_pixel_ccs': xx_for_zip, 'y_pixel_ccs': yy_for_zip, 'e_star': e_star, 
-#                                'ex_star_dvcs': ex_star_dvcs, 'ey_star_dvcs': ey_star_dvcs, 
-#                                 'ex_rot_star_dvcs': ex_rot_star_dvcs, 'ey_rot_star_dvcs': ey_rot_star_dvcs, 
-#                                 'i_xx': i_xx, 'i_yy': i_yy, 'i_xx': i_xy,  
-#                                 'e1': e1, 'e2': e2, 'theta_star_dvcs': theta_star_dvcs,
-#                                 'xx_star_dvcs': xx_star_dvcs, 'yy_star_dvcs': yy_star_dvcs, 
-#                                 'xx_rot_star_dvcs': xx_rot_star_dvcs, 'yy_rot_star_dvcs': yy_rot_star_dvcs, 
-#                                 'ra_star_dvcs': ra_star_dvcs, 'dec_star_dvcs': dec_star_dvcs,
-#                                'theta_alternate':theta_alternate, 'fwhm': fwhm, 'detector': [det.getId()] * len(xx_for_zip), 
-#                                'visit_id':  [visit_id] * len(xx_for_zip)})
-#             df.to_csv(fileout, index=None)
-#             # df['theta_rot_star_dvcs'] = np.degrees(np.arctan2(ex_rot_star_dvcs, ey_rot_star_dvcs))
-#             # df[['xx_rot_star_dvcs', 'yy_rot_star_dvcs', 'e_star', 'theta_rot_star_dvcs']].to_csv(fileout+'_for_ricardo', index=None)
-    
-#         return e_star, ex_star_dvcs, ey_star_dvcs, ex_rot_star_dvcs, ey_rot_star_dvcs, i_xx, i_yy, i_xy, \
-#             aaIxx, aaIxy, aaIyy, e1, e2, xx_star_dvcs, yy_star_dvcs, theta_star_dvcs, \
-#             xx_rot_star_dvcs, yy_rot_star_dvcs, ra_star_dvcs, dec_star_dvcs, fwhm, size
-
-#     elif regular_grid_or_star_positions == 1:
-#         if fileout != '':
-#             df = pd.DataFrame(data={'x_pixel_ccs': xx_for_zip, 'y_pixel_ccs': yy_for_zip, 'e_star': e_star, 
-#                                'ex_star_dvcs': ex_star_dvcs, 'ey_star_dvcs': ey_star_dvcs, 
-#                                 'ex_rot_star_dvcs': ex_rot_star_dvcs, 'ey_rot_star_dvcs': ey_rot_star_dvcs, 
-#                                 'i_xx': i_xx, 'i_yy': i_yy, 'i_xx': i_xy,  
-#                                 'e1': e1, 'e2': e2, 'theta_star_dvcs': theta_star_dvcs,
-#                                 'xx_star_dvcs': xx_star_dvcs, 'yy_star_dvcs': yy_star_dvcs, 
-#                                 'xx_rot_star_dvcs': xx_rot_star_dvcs, 'yy_rot_star_dvcs': yy_rot_star_dvcs, 
-#                                 'ra_star_dvcs': ra_star_dvcs, 'dec_star_dvcs': dec_star_dvcs,
-#                                'theta_alternate':theta_alternate, 'fwhm': fwhm, 'fluxes': fluxes, 'detector': [det.getId()] * len(xx_for_zip), 
-#                                'visit_id':  [visit_id] * len(xx_for_zip)})
-#             df.to_csv(fileout, index=None)
-    
-#         return e_star, ex_star_dvcs, ey_star_dvcs, ex_rot_star_dvcs, ey_rot_star_dvcs, i_xx, i_yy, i_xy, \
-#             aaIxx, aaIxy, aaIyy, e1, e2, xx_star_dvcs, yy_star_dvcs, theta_star_dvcs, \
-#             xx_rot_star_dvcs, yy_rot_star_dvcs, ra_star_dvcs, dec_star_dvcs, fwhm, size, fluxes
+    axs[0].text(0.05, 0.92, "coma", transform=axs[0].transAxes, fontsize=10)
+    axs[1].text(0.82, 0.92, "trefoil", transform=axs[1].transAxes, fontsize=10)
